@@ -13,6 +13,24 @@
    [pallet.version-dispatch
     :only [defmulti-version-plan defmethod-version-plan]]))
 
+;;; # Final Properties
+(defprotocol FinalProperty
+  "A protocol that provides a predicate for whether a property value is final"
+  (final? [_] "Predicate for whether a property value is final"))
+
+(extend-type Object FinalProperty (final? [_] false))
+
+(deftype FinalPropertyValue [value]
+  FinalProperty
+  (final? [_] true)
+  Object
+  (toString [_] (str value)))
+
+(defn final-value
+  "Flag a property value as final"
+  [x]
+  (FinalPropertyValue. x))
+
 ;;; # Configuration properties
 (defn user-file [user & components]
   (let [home (script (~user-home ~user))]
@@ -48,8 +66,8 @@
     hdfs-settings {:os :linux :version [[0 20 0] [0 20 99]]}
     [os os-version version {:keys [owner] :as settings}]
   (m-result
-   {:dfs.data.dir (user-file owner "dfs/data")
-    :dfs.name.dir (user-file owner "dfs/name")
+   {:dfs.data.dir (final-value (user-file owner "dfs/data"))
+    :dfs.name.dir (final-value (user-file owner "dfs/name"))
     :dfs.datanode.du.reserved 1073741824
     :dfs.namenode.handler.count 10
     :dfs.permissions.enabled true
@@ -63,8 +81,8 @@
     mapred-settings {:os :linux :version [[0 20 0] [0 20 99]]}
   [os os-version version {:keys [owner job-tracker-ip] :as settings}]
   (m-result
-   {:tasktracker.http.threads 46
-    :mapred.local.dir (user-file owner "mapred/local")
+   {:tasktracker.http.threads (final-value 46)
+    :mapred.local.dir (final-value (user-file owner "mapred/local"))
     :mapred.system.dir "/hadoop/mapred/system"
     :mapred.child.java.opts "-Xmx550m"
     :mapred.job.tracker (format "%s:8021" job-tracker-ip)
