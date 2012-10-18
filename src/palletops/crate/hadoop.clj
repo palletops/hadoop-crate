@@ -18,6 +18,7 @@
     :only [def-plan-fn assoc-settings defmethod-plan get-settings
            get-node-settings group-name nodes-with-role target-id]]
    [pallet.crate.etc-default :only [write] :rename {write write-etc}]
+   [pallet.crate.etc-hosts :only [hosts hosts-for-group] :as etc-hosts]
    [pallet.crate.java :only [java-home]]
    [pallet.crate.ssh-key :only [authorize-key generate-key public-key]]
    [pallet.crate-install :only [install]]
@@ -263,6 +264,22 @@ map entry."
   [{:keys [env-vars] :as settings}
    (get-settings :hadoop {:instance-id instance-id})]
   (apply write-etc "hadoop-env.sh" (apply concat env-vars)))
+
+;;; # Hostnames
+(def-plan-fn set-hostname
+  "Set the hostname on a node"
+  [node-name target-name]
+  (etc-hosts/set-hostname node-name))
+
+(def-plan-fn setup-etc-hosts
+  "Adds the ip addresses and host names of all nodes in all the groups in
+  `groups` to the `/etc/hosts` file in this node.
+   :private-ip will use the private ip address of the nodes instead of the
+       public one "
+  [groups & {:keys [private-ip] :as options}]
+  (m-map #(hosts-for-group % :private-ip private-ip) (map name groups))
+  (hosts))
+
 
 ;;; # Run hadoop
 (defn hadoop-env-script
