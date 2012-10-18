@@ -327,10 +327,28 @@ map entry."
    (get-settings :hadoop {:instance-id instance-id})]
   (with-action-options {:sudo-user user}
     (exec-checked-script
-     (str "hadoop " (join " " args))
+     (str "hadoop-mkdir " (join " " args))
      ~(hadoop-env-script settings)
      (when (not ~(hadoop-exec-script home ["fs" "-test" "-d" path]))
        ~(hadoop-exec-script home ["fs" "-mkdir" path])))))
+
+(def-plan-fn hadoop-rmdir
+  "Remove the specifed path in the hadoop filesystem, if it exitst."
+  {:arglists '[[options? path]]}
+  [& args]
+  [[[path] {:keys [instance-id]}] (m-result
+                                 (if (or (map? (first args))
+                                         (nil? (first args)))
+                                   [(rest args) (first args)]
+                                   [args]))
+   {:keys [home user] :as settings}
+   (get-settings :hadoop {:instance-id instance-id})]
+  (with-action-options {:sudo-user user}
+    (exec-checked-script
+     (str "hadoop-rmdir " (join " " args))
+     ~(hadoop-env-script settings)
+     (when ~(hadoop-exec-script home ["dfs" "-test" "-d" path])
+       ~(hadoop-exec-script home ["dfs" "-rmr" path])))))
 
 
 ;;; # Run hadoop daemons

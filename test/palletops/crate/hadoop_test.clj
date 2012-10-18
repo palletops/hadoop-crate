@@ -4,12 +4,11 @@
    [pallet.actions
     :only [directory exec-checked-script remote-file remote-file-content]]
    [pallet.algo.fsmop :only [complete?]]
-   [pallet.api :only [lift plan-fn server-spec]]
+   [pallet.api :only [lift plan-fn group-spec server-spec]]
    [pallet.build-actions :only [build-actions]]
    [pallet.crate :only [def-plan-fn get-settings]]
    [pallet.crate.automated-admin-user :only [automated-admin-user]]
    [pallet.crate.java :only [java-settings install-java]]
-   [pallet.core :only [group-spec]]
    [pallet.live-test :only [images test-nodes]]
    [pallet.test-utils :only [make-node]]
    palletops.crate.hadoop
