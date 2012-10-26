@@ -44,10 +44,10 @@
 
 (defmethod-version-plan
     core-settings {:os :linux :version [[0 20 0] [0 20 99]]}
-    [os os-version version {:keys [owner name-node-ip] :as settings}]
+    [os os-version version {:keys [owner name-node-hostname] :as settings}]
   (m-result
    {:fs.checkpoint.dir (user-file owner "/dfs/secondary")
-    :fs.default.name (format "hdfs://%s:8020" name-node-ip)
+    :fs.default.name (format "hdfs://%s:8020" name-node-hostname)
     :fs.trash.interval 1440
     :io.file.buffer.size 65536
     :hadoop.tmp.dir "/tmp/hadoop"
@@ -79,13 +79,13 @@
 
 (defmethod-version-plan
     mapred-settings {:os :linux :version [[0 20 0] [0 20 99]]}
-  [os os-version version {:keys [owner job-tracker-ip] :as settings}]
+  [os os-version version {:keys [owner job-tracker-hostname] :as settings}]
   (m-result
    {:tasktracker.http.threads (final-value 46)
     :mapred.local.dir (final-value (user-file owner "mapred/local"))
-    :mapred.system.dir "/hadoop/mapred/system"
+    :mapred.system.dir (final-value (user-file owner "mapred/system"))
     :mapred.child.java.opts "-Xmx550m"
-    :mapred.job.tracker (format "%s:8021" job-tracker-ip)
+    :mapred.job.tracker (format "%s:8021" job-tracker-hostname)
     :mapred.job.tracker.handler.count 10
     :mapred.map.tasks.speculative.execution true
     :mapred.reduce.tasks.speculative.execution false

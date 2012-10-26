@@ -120,8 +120,7 @@
   (let [settings {}]
     (doseq [image (images)]
       (test-nodes
-       [compute node-map node-types [; :install
-                                     :collect-ssh-keys
+       [compute node-map node-types [:install
                                      :configure
                                      :install-test
                                      :configure-test]]

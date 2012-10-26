@@ -16,17 +16,19 @@
    [pallet.api :only [plan-fn server-spec]]
    [pallet.crate
     :only [def-plan-fn assoc-settings defmethod-plan get-settings
-           get-node-settings group-name nodes-with-role target-id]]
+           get-node-settings group-name nodes-with-role target-id
+           target-name]]
    [pallet.crate.etc-default :only [write] :rename {write write-etc}]
-   [pallet.crate.etc-hosts :only [hosts hosts-for-group] :as etc-hosts]
+   [pallet.crate.etc-hosts :only [hosts hosts-for-role] :as etc-hosts]
    [pallet.crate.java :only [java-home]]
    [pallet.crate.ssh-key :only [authorize-key generate-key public-key]]
    [pallet.crate-install :only [install]]
    [palletops.crate.hadoop.config
     :only [core-settings hdfs-settings mapred-settings final?]]
-   [pallet.node :only [primary-ip]]
+   [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
    [pallet.stevedore :only [script]]
+   [pallet.utils :only [apply-map]]
    [pallet.version-dispatch
     :only [defmulti-version-plan defmethod-version-plan]]
    [pallet.versions :only [as-version-vector version-string]]))
@@ -123,9 +125,14 @@
    settings (settings-map (:version settings) settings)
    namenode (namenode-node settings)
    jobtracker (job-tracker-node settings)
-   settings (m-result (assoc settings
-                        :name-node-ip (primary-ip namenode)
-                        :job-tracker-ip (primary-ip jobtracker)))
+   settings (m-result
+             (assoc settings
+               :name-node-ip (or (private-ip namenode)
+                                 (primary-ip namenode))
+               :job-tracker-ip (or (private-ip jobtracker)
+                                   (primary-ip jobtracker))
+               :name-node-hostname (hostname namenode)
+               :job-tracker-hostname (hostname jobtracker)))
    ;; second pass
    core-settings (core-settings (:version settings) settings)
    hdfs-settings (hdfs-settings (:version settings) settings)
@@ -140,8 +147,8 @@
                   #(merge (or % {})
                      {:HADOOP_PID_DIR (:pid-dir settings)
                       :HADOOP_LOG_DIR (:log-dir settings)
-                      :HADOOP_SSH_OPTS "\"-o StrictHostKeyChecking=no\""
-                      :HADOOP_OPTS "\"-Djava.net.preferIPv4Stack=true\""}))))]
+                      :HADOOP_SSH_OPTS "-o StrictHostKeyChecking=no"
+                      :HADOOP_OPTS "-Djava.net.preferIPv4Stack=true"}))))]
   (assoc-settings :hadoop settings {:instance-id instance-id}))
 
 ;;; # Install
@@ -176,7 +183,7 @@
                :literal true
                :content (script
                          (set! JAVA_HOME (~java-home))
-                         (set! PATH (str @PATH ":" ~home)))))
+                         (set! PATH (str @PATH ":" ~home "/bin")))))
 
 ;;; ## SSH Access
 (def-plan-fn ssh-key
@@ -258,12 +265,22 @@ map entry."
    {:content (configuration-xml (get settings config-key))
     :literal false}))
 
+(defn default-hadoop-env
+  [{:keys [home log-dir pid-dir] :as settings}]
+  {:HADOOP_PID_DIR pid-dir
+   :HADOOP_LOG_DIR log-dir
+   :HADOOP_SSH_OPTS "-o StrictHostKeyChecking=no"
+   :HADOOP_OPTS  "-Djava.net.preferIPv4Stack=true"
+   :JAVA_HOME (script (~java-home))})
+
 (def-plan-fn env-file
   "Environment settings for the hadoop services"
-  [session {:keys [instance-id]}]
-  [{:keys [env-vars] :as settings}
+  [{:keys [instance-id]}]
+  [{:keys [config-dir env-vars] :as settings}
    (get-settings :hadoop {:instance-id instance-id})]
-  (apply write-etc "hadoop-env.sh" (apply concat env-vars)))
+  (apply-map
+   write-etc (str config-dir "/hadoop-env.sh")
+   (merge (default-hadoop-env settings) env-vars)))
 
 ;;; # Hostnames
 (def-plan-fn set-hostname
@@ -276,9 +293,9 @@ map entry."
   `groups` to the `/etc/hosts` file in this node.
    :private-ip will use the private ip address of the nodes instead of the
        public one "
-  [groups & {:keys [private-ip] :as options}]
-  (m-map #(hosts-for-group % :private-ip private-ip) (map name groups))
-  (hosts))
+  [roles & {:keys [private-ip] :as options}]
+  (m-map #(hosts-for-role % :private-ip private-ip) roles)
+  hosts)
 
 
 ;;; # Run hadoop
@@ -391,7 +408,7 @@ already running."
     (exec-script
      ~(hadoop-env-script settings)
      (pipe
-      (echo "N") ; confirmation if already formatted
+      (echo "Y") ; confirmation if already formatted
       ((str ~home "/bin/hadoop") namenode -format))
      pwd))) ; gratuitous command to suppress errors
 
@@ -404,19 +421,37 @@ already running."
   (hadoop-exec opts "fs" "-chmod" "+w" data-dir))
 
 ;;; # server-specs
+(def-plan-fn local-dirs
+  "Create the local directories referred to by the settings."
+  [{:keys [instance-id] :as opts}]
+  [{:keys [owner group] :as settings} (get-settings :hadoop opts)]
+  (m-map
+   #(directory (str %) :owner owner :group group :recursive false)
+   (map
+    #(get-in settings %)
+    [[:hdfs-site :dfs.data.dir]
+     [:hdfs-site :dfs.name.dir]
+     [:core-site :fs.checkpoint.dir]
+     [:mapred-site :mapred.local.dir]
+     [:mapred-site :mapred.system.dir]])))
 
 (defn hdfs-node
   "A hdfs server-spec. Settings as for hadoop-settings."
   [settings {:keys [instance-id] :as opts}]
   (server-spec
-   :roles #{:name-node}
+   :roles #{:data-node}
    :phases
    {:settings (plan-fn (hadoop-settings settings))
+    :install (plan-fn
+              (local-dirs opts))
     :configure (plan-fn
                 "hdfs-node-configure"
+                (setup-etc-hosts
+                 [:hdfs-node :name-node :secondary-name-node :job-tracker
+                  :data-node :task-tracker])
+                (settings-config-file :hdfs-site opts)
                 (format-hdfs opts)
-                (initialise-hdfs opts)
-                (settings-config-file :hdfs-site opts))}))
+                (initialise-hdfs opts))}))
 
 (defn enable-jobtracker-ssh-spec
   "Returns a server-spec that authorises the jobtracker for ssh."
@@ -428,7 +463,7 @@ already running."
   {:hdfs-node :hdfs-site
    :name-node :core-site
    :secondary-name-node :core-site
-   :job-tracker :core-site
+   :job-tracker :mapred-site
    :data-node :core-site
    :task-tracker :mapred-site})
 
@@ -448,6 +483,7 @@ already running."
     :configure (plan-fn
                  "hadoop-server-spec-configure"
                  (settings-config-file (get config-file-for-role role) opts)
+                 (env-file opts)
                  (hadoop-service
                   service-name
                   (merge {:description service-description} opts)))}))
@@ -477,7 +513,8 @@ already running."
 (defn data-node
   "A data node server-spec. Settings as for hadoop-settings."
   [settings & {:keys [instance-id] :as opts}]
-  (hadoop-server-spec settings opts :data-node "datanode" "Data Node"))
+  (hadoop-server-spec
+   settings opts :data-node "datanode" "Data Node" hdfs-node))
 
 (defn task-tracker
   "A task tracker server-spec. Settings as for hadoop-settings."
