@@ -302,11 +302,6 @@ map entry."
 (defn hadoop-env-script
   [{:keys [home log-dir pid-dir] :as settings}]
   (script
-   ("export" (set! HADOOP_PID_DIR (quoted ~pid-dir)))
-   ("export" (set! HADOOP_LOG_DIR (quoted ~log-dir)))
-   ("export" (set! HADOOP_SSH_OPTS (quoted "-o StrictHostKeyChecking=no")))
-   ("export" (set! HADOOP_OPTS (quoted "-Djava.net.preferIPv4Stack=true")))
-   ("export" (set! JAVA_HOME (~java-home)))
    ("export" (set! PATH (str @PATH ":" ~home)))))
 
 (defn hadoop-exec-script
@@ -402,14 +397,17 @@ already running."
   nothing. Unfortunately, hadoop returns non-zero if it has already been
   formatted, even if we tell it not to format, so it is difficult to check the
   exit code."
-  [{:keys [instance-id]}] [{:keys [home user] :as settings}
-   (get-settings :hadoop {:instance-id instance-id})]
+  [{:keys [force]} {:keys [instance-id]}]
+  [{:keys [home user] :as settings}
+   (get-settings :hadoop {:instance-id instance-id})
+   name-dir (m-result (get-in settings [:hdfs-site :dfs.name.dir]))]
   (with-action-options {:sudo-user user}
     (exec-script
      ~(hadoop-env-script settings)
-     (pipe
-      (echo "Y") ; confirmation if already formatted
-      ((str ~home "/bin/hadoop") namenode -format))
+     (if (or (not (file-exists? ~(str name-dir "/current/VERSION"))) ~force)
+       (pipe
+        (echo "Y") ; confirmation
+        ((str ~home "/bin/hadoop") namenode -format)))
      pwd))) ; gratuitous command to suppress errors
 
 (def-plan-fn initialise-hdfs
@@ -450,8 +448,7 @@ already running."
                  [:hdfs-node :name-node :secondary-name-node :job-tracker
                   :data-node :task-tracker])
                 (settings-config-file :hdfs-site opts)
-                (format-hdfs opts)
-                (initialise-hdfs opts))}))
+                (env-file opts))}))
 
 (defn enable-jobtracker-ssh-spec
   "Returns a server-spec that authorises the jobtracker for ssh."
@@ -481,18 +478,21 @@ already running."
               (create-directories opts)
               (install-hadoop :instance-id instance-id))
     :configure (plan-fn
-                 "hadoop-server-spec-configure"
-                 (settings-config-file (get config-file-for-role role) opts)
-                 (env-file opts)
-                 (hadoop-service
-                  service-name
-                  (merge {:description service-description} opts)))}))
+                (settings-config-file (get config-file-for-role role) opts)
+                (env-file opts))
+    :run (plan-fn
+          (hadoop-service
+           service-name
+           (merge {:description service-description} opts)))}))
 
 (defn name-node
   "A namenode server-spec. Settings as for hadoop-settings."
   [settings & {:keys [instance-id] :as opts}]
-  (hadoop-server-spec
-   settings opts :name-node "namenode" "Name Node" hdfs-node))
+  (server-spec
+   :extends [(hadoop-server-spec
+              settings opts :name-node "namenode" "Name Node" hdfs-node)]
+   :phases {:configure (plan-fn "format-hdfs" (format-hdfs {} opts))
+            :init (plan-fn (initialise-hdfs opts))}))
 
 (defn secondary-name-node
   "A secondary namenode server-spec. Settings as for hadoop-settings."
