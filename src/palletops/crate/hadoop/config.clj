@@ -97,20 +97,19 @@
     :mapred.compress.map.output true
     :mapred.output.compression.type "BLOCK"}))
 
+(defmulti-version-plan metrics-settings [version settings])
 
-
-;; ;; second pass
-;; core-settings default-core-settings
-;; hdfs-settings default-hdfs-settings
-;; mapred-settings default-mapred-settings
-
-;; (assoc-settings
-;;  :hadoop
-;;  (-> settings
-;;      (update-in [:core-settings] #(merge core-settings %))
-;;      (update-in [:hdfs-settings] #(merge hdfs-settings %))
-;;      (update-in [:mapred-settings] #(merge mapred-settings %)))
-;;  {:instance-id instance-id})
-
- ;; [pallet.script.lib :only [user-home]]
- ;; [pallet.stevedore :only [script]]
+(defmethod-version-plan
+    metrics-settings {:os :linux :version [[0 20 0] [0 20 99]]}
+  [os os-version version {:keys [owner job-tracker-hostname] :as settings}]
+  (m-result
+   {:dfs.class "org.apache.hadoop.metrics.spi.NoEmitMetricsContext"
+    :dfs.period 10
+    :mapred.class "org.apache.hadoop.metrics.spi.NoEmitMetricsContext"
+    :mapred.period 10
+    :jvm.class "org.apache.hadoop.metrics.spi.NoEmitMetricsContext"
+    :jvm.period 10
+    :ugi.class "org.apache.hadoop.metrics.spi.NoEmitMetricsContext"
+    :ugi.period 10
+    :fairscheduler.class "org.apache.hadoop.metrics.spi.NoEmitMetricsContext"
+    :fairscheduler.period 10}))

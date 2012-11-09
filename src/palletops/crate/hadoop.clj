@@ -10,12 +10,15 @@
    [pallet.action :only [with-action-options]]
    [pallet.actions
     :only [directory exec-checked-script exec-script remote-directory
-           remote-file symbolic-link user group assoc-settings]
+           remote-file symbolic-link user group assoc-settings update-settings]
     :rename {user user-action group group-action
-             assoc-settings assoc-settings-action}]
+             assoc-settings assoc-settings-action
+             update-settings update-settings-action}]
    [pallet.api :only [plan-fn server-spec]]
+   [pallet.config-file.format :only [name-values]]
    [pallet.crate
-    :only [def-plan-fn assoc-settings defmethod-plan get-settings
+    :only [def-plan-fn assoc-settings update-settings
+           defmethod-plan get-settings
            get-node-settings group-name nodes-with-role target-id
            target-name]]
    [pallet.crate.etc-default :only [write] :rename {write write-etc}]
@@ -24,7 +27,8 @@
    [pallet.crate.ssh-key :only [authorize-key generate-key public-key]]
    [pallet.crate-install :only [install]]
    [palletops.crate.hadoop.config
-    :only [core-settings hdfs-settings mapred-settings final?]]
+    :only [core-settings hdfs-settings mapred-settings metrics-settings final?]]
+   [pallet.map-merge :only [merge-key merge-keys]]
    [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
    [pallet.stevedore :only [script]]
@@ -113,6 +117,21 @@
                :install-strategy ::remote-directory
                :remote-directory {:url url :md5-url md5-url})))))
 
+
+(defmethod merge-key ::string-join
+  [_ _ val-in-result val-in-latter]
+  (merge-with
+   #(if (.contains %1 %2)
+      %1
+      (str %1 " " %2))
+   val-in-result val-in-latter))
+
+(def
+  ^{:doc "Map from key to merge algorithm. Specifies how specs are merged."}
+  merge-settings-algorithm
+  {:config :deep-merge
+   :env-vars ::string-join})
+
 (def-plan-fn hadoop-settings
   "Settings for hadoop"
   [{:keys [user owner group dist dist-urls cloudera-version version
@@ -137,11 +156,13 @@
    core-settings (core-settings (:version settings) settings)
    hdfs-settings (hdfs-settings (:version settings) settings)
    mapred-settings (mapred-settings (:version settings) settings)
+   metrics-settings (metrics-settings (:version settings) settings)
    settings (m-result
              (-> settings
                  (update-in [:core-site] #(merge core-settings %))
                  (update-in [:hdfs-site] #(merge hdfs-settings %))
                  (update-in [:mapred-site] #(merge mapred-settings %))
+                 (update-in [:metrics] #(merge metrics-settings %))
                  (update-in
                   [:env-vars]
                   #(merge (or % {})
@@ -149,7 +170,14 @@
                       :HADOOP_LOG_DIR (:log-dir settings)
                       :HADOOP_SSH_OPTS "-o StrictHostKeyChecking=no"
                       :HADOOP_OPTS "-Djava.net.preferIPv4Stack=true"}))))]
-  (assoc-settings :hadoop settings {:instance-id instance-id}))
+  (update-settings
+   :hadoop {:instance-id instance-id}
+   (partial merge-keys merge-settings-algorithm) settings))
+
+(def-plan-fn hadoop-env
+  "Add into the hadoop env shell settings"
+  [kv-pairs & {:keys [instance-id] :as options}]
+  (update-settings :hadoop options update-in [:env-vars] merge kv-pairs))
 
 ;;; # Install
 (defmethod-plan install ::remote-directory
@@ -186,7 +214,7 @@
                          (set! PATH (str @PATH ":" ~home "/bin")))))
 
 ;;; ## SSH Access
-(def-plan-fn ssh-key
+(def-plan-fn install-ssh-key
   "Ensure a public key for accessing the node is available in the node's
   settings."
   [{:keys [instance-id] :as options}]
@@ -194,8 +222,14 @@
    group group-name
    key-name (m-result (format "ph_%s_%s_key" group id))
    {:keys [user] :as settings} (get-settings :hadoop options)]
-  (generate-key user :comment key-name)
-  [key (public-key user)]
+  (generate-key user :comment key-name))
+
+(def-plan-fn ssh-key
+  "Make a public key for accessing the node is available in the node's
+  settings."
+  [{:keys [instance-id] :as options}]
+  [{:keys [user] :as settings} (get-settings :hadoop options)
+   key (public-key user)]
   (assoc-settings-action :hadoop {:public-key @key} :instance-id instance-id))
 
 (def-plan-fn authorize-node
@@ -251,18 +285,31 @@ map entry."
   "Helper to write config files"
   [{:keys [owner group config-dir] :as settings} filename file-source]
   (apply
-   remote-file (str config-dir "/" filename ".xml")
+   remote-file (str config-dir "/" filename)
    :owner owner :group group
    (apply concat file-source)))
 
 (def-plan-fn settings-config-file
-  "Write a config file based on settings."
+  "Write an XML config file based on settings."
   [config-key {:keys [instance-id]}]
   [{:keys [home user] :as settings}
    (get-settings :hadoop {:instance-id instance-id})]
   (hadoop-config-file
-   settings (name config-key)
+   settings (str (name config-key) ".xml")
    {:content (configuration-xml (get settings config-key))
+    :literal false}))
+
+(def properties-file
+  {:metrics "hadoop-metrics.properties"})
+
+(def-plan-fn properties-config-file
+  "Write an properties config file based on settings."
+  [config-key {:keys [instance-id]}]
+  [{:keys [home user] :as settings}
+   (get-settings :hadoop {:instance-id instance-id})]
+  (hadoop-config-file
+   settings (properties-file config-key)
+   {:content (name-values (get settings config-key) :separator "=")
     :literal false}))
 
 (defn default-hadoop-env
@@ -464,7 +511,7 @@ already running."
    :data-node :core-site
    :task-tracker :mapred-site})
 
-(defn hadoop-server-spec
+(defn hadoop-role-spec
   "Returns a server-spec implementing the specified Hadoop server."
   [settings {:keys [instance-id] :as opts} role service-name
    service-description & extends]
@@ -479,47 +526,53 @@ already running."
               (install-hadoop :instance-id instance-id))
     :configure (plan-fn
                 (settings-config-file (get config-file-for-role role) opts)
+                (properties-config-file :metrics opts)
                 (env-file opts))
     :run (plan-fn
           (hadoop-service
            service-name
            (merge {:description service-description} opts)))}))
 
-(defn name-node
-  "A namenode server-spec. Settings as for hadoop-settings."
-  [settings & {:keys [instance-id] :as opts}]
+(defmulti hadoop-server-spec
+  "Return a server-spec for the given hadoop role and settings."
+  (fn [role settings & {:keys [instance-id] :as opts}] role))
+
+;; A namenode server-spec. Settings as for hadoop-settings.
+(defmethod hadoop-server-spec :name-node
+  [_ settings & {:keys [instance-id] :as opts}]
   (server-spec
-   :extends [(hadoop-server-spec
+   :extends [(hadoop-role-spec
               settings opts :name-node "namenode" "Name Node" hdfs-node)]
    :phases {:configure (plan-fn "format-hdfs" (format-hdfs {} opts))
             :init (plan-fn (initialise-hdfs opts))}))
 
-(defn secondary-name-node
-  "A secondary namenode server-spec. Settings as for hadoop-settings."
-  [settings & {:keys [instance-id] :as opts}]
-  (hadoop-server-spec
+;; A secondary namenode server-spec. Settings as for hadoop-settings.
+(defmethod hadoop-server-spec :secondary-name-node
+  [_ settings & {:keys [instance-id] :as opts}]
+  (hadoop-role-spec
    settings opts
    :secondary-name-node "secondarynamenode" "Secondary Name Node"))
 
-(defn job-tracker
-  "Returns a job tracker server-spec. Settings as for hadoop-settings."
-  [settings & {:keys [instance-id] :as opts}]
+;; Returns a job tracker server-spec. Settings as for hadoop-settings.
+(defmethod hadoop-server-spec :job-tracker
+  [_ settings & {:keys [instance-id] :as opts}]
   (server-spec
-   :extends [(hadoop-server-spec
+   :extends [(hadoop-role-spec
               settings opts :job-tracker "jobtracker" "Job Tracker")]
-   :phases {:install (ssh-key opts)
+   :phases {:install (install-ssh-key opts)
+            :configure (ssh-key opts)
             :collect-ssh-keys (ssh-key opts)}))
 
-(defn data-node
-  "A data node server-spec. Settings as for hadoop-settings."
-  [settings & {:keys [instance-id] :as opts}]
-  (hadoop-server-spec
+;; A data node server-spec. Settings as for hadoop-settings.
+(defmethod hadoop-server-spec :data-node
+  [_ settings & {:keys [instance-id] :as opts}]
+  (hadoop-role-spec
    settings opts :data-node "datanode" "Data Node" hdfs-node))
 
-(defn task-tracker
-  "A task tracker server-spec. Settings as for hadoop-settings."
-  [settings & {:keys [instance-id] :as opts}]
+;; A task tracker server-spec. Settings as for hadoop-settings.
+(defmethod hadoop-server-spec :task-tracker
+  [_ settings & {:keys [instance-id] :as opts}]
   (server-spec
    :extends [(enable-jobtracker-ssh-spec opts)
-             (hadoop-server-spec
+             (hadoop-role-spec
               settings opts :task-tracker "tasktracker" "Task Tracker")]))
