@@ -3,6 +3,7 @@
   :url "http://github.com/palletops/hadoop-crate"
   :license {:name "All rights reserved"}
   :dependencies [[org.clojure/clojure "1.4.0"]
+                 [org.clojure/core.logic "0.8.0-beta3-SNAPSHOT"]
                  [org.clojure/data.xml "0.0.6"]
                  [org.cloudhoist/pallet "0.8.0-SNAPSHOT"]
                  [org.cloudhoist/java "0.8.0-SNAPSHOT"]]

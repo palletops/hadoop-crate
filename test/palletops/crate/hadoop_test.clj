@@ -33,6 +33,7 @@
             (build-actions {:phase-context "hadoop-service"}
               (exec-checked-script
                (str "start hadoop daemon: namenode")
+               ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
                (if-not (pipe (jps) (grep "-i" namenode))
                  ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
                   start namenode)))))
@@ -45,6 +46,7 @@
             (build-actions {:phase-context "hadoop-service"}
               (exec-checked-script
                (str "start hadoop daemon: n")
+               ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
                ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
                 start namenode))))
            (first
@@ -57,6 +59,7 @@
     (is (= (first
             (build-actions {:phase-context "hadoop-service"}
               (exec-checked-script
+               ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
                (str "stop hadoop daemon: namenode")
                ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
                 stop namenode))))
@@ -129,7 +132,9 @@
          "namenode"
          :image image
          :count 1
-         :extends [java (name-node settings) (job-tracker settings)]
+         :extends [java
+                   (hadoop-server-spec :name-node settings)
+                   (hadoop-server-spec :job-tracker settings)]
          :phases {:bootstrap (plan-fn (automated-admin-user))
                   :install-test (plan-fn (download-books))
                   :configure-test (plan-fn (import-books-to-hdfs))
@@ -140,7 +145,9 @@
           "datanode"
           :image image
           :count 1
-          :extends [java (data-node settings) (task-tracker settings)]
+          :extends [java
+                    (hadoop-server-spec :data-node settings)
+                    (hadoop-server-spec :task-tracker settings)]
           :phases {:bootstrap (plan-fn (automated-admin-user))})}
        (let [op (lift (:namenode node-types)
                       :phase [:run-test :post-run]

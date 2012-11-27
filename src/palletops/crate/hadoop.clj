@@ -1,6 +1,8 @@
 ;;; Copyright 2012 Hugo Duncan.
 ;;; All rights reserved.
 
+;;; TODO kernel and os limits
+
 (ns palletops.crate.hadoop
   "A pallet crate for installing hadoop"
   (:use
@@ -27,7 +29,7 @@
    [pallet.crate.ssh-key :only [authorize-key generate-key public-key]]
    [pallet.crate-install :only [install]]
    [palletops.crate.hadoop.config
-    :only [core-settings hdfs-settings mapred-settings metrics-settings final?]]
+    :only [install-config metrics-config config-for final?]]
    [pallet.map-merge :only [merge-key merge-keys]]
    [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
@@ -42,13 +44,13 @@
 (def-plan-fn namenode-node
   "Return the IP of the namenode."
   [{:keys [instance-id]}]
-  [[namenode] (nodes-with-role :name-node)]
+  [[namenode] (nodes-with-role :namenode)]
   (m-result (:node namenode)))
 
 (def-plan-fn job-tracker-node
   "Return the IP of the jobtracker."
   [{:keys [instance-id]}]
-  [[jobtracker] (nodes-with-role :job-tracker)]
+  [[jobtracker] (nodes-with-role :jobtracker)]
   (m-result (:node jobtracker)))
 
 ;;; # Settings
@@ -61,7 +63,7 @@
    :dist :cloudera
    :dist-urls {:apache "http://www.apache.org/dist/"
               :cloudera "http://archive.cloudera.com/"}
-   :name-node-role :namenode
+   :namenode-role :namenode
    :data-dir "/tmp/namenode/data"
    :pid-dir (script (str (~pid-root) "/hadoop"))
    :log-dir (script (str (~log-root) "/hadoop"))
@@ -117,6 +119,9 @@
                :install-strategy ::remote-directory
                :remote-directory {:url url :md5-url md5-url})))))
 
+(defn env-var-merge
+  [a b]
+  (str a " " b))
 
 (defmethod merge-key ::string-join
   [_ _ val-in-result val-in-latter]
@@ -132,10 +137,58 @@
   {:config :deep-merge
    :env-vars ::string-join})
 
+(def ^{:doc "A sequence of all hadoop roles"}
+  hadoop-roles
+  [:namenode :jobtracker :datanode :tasktracker :secondary-namenode
+   :balancer])
+
+(def property-env-vars
+  [["pallet.%s.mx" "HADOOP_%s_OPTS" "-Xmx%sm"]])
+
+(defn role-properties->env-vars
+ "Convert pallet properties to hadoop environment variables."
+ [env-vars role config]
+ (reduce
+  (fn [env-vars [property-fmt var-fmt value-fmt]]
+    (let [property (keyword (format property-fmt (name role)))]
+      (if-let [value (property config)]
+        (let [var (keyword (format var-fmt (name role)))
+              val (format value-fmt value)]
+          (update-in env-vars [var] #(str (if % (str % " ") "") val)))
+        env-vars)))
+  env-vars
+  property-env-vars))
+
+(defn properties->env-vars
+ "Convert pallet properties to hadoop environment variables."
+ [config]
+ (reduce
+  (fn [env-vars role]
+    (role-properties->env-vars env-vars role config))
+  {}
+  hadoop-roles))
+
 (def-plan-fn hadoop-settings
-  "Settings for hadoop"
+  "Settings for hadoop.
+
+  `:config` takes a map of hadoop configuration properties to values. It can
+            also contain pallet.* and kernel.* properties that are used as
+            described below.
+
+  pallet.* Properties:
+
+    pallet.ROLE.mx sets the maximum java memory size for that role.
+    pallet.ROLE.mx sets the maximum java memory size for that role.
+
+  kernel.* Properties
+
+    kernel.fs.file-max   the maximum number of file descriptors.
+    kernel.vm.swapiness  the propensity for the os to swap application memory
+    kernel.vm.overcommit        controls overcommit in the os
+    kernel.vm.overcommit_ratio  controls the amount of memory overcommit
+"
   [{:keys [user owner group dist dist-urls cloudera-version version
-           instance-id]
+           config metrics instance-id]
     :as settings}]
   [settings (m-result (merge (default-settings) settings))
    home (m-result (or (:home settings) (default-home settings)))
@@ -146,30 +199,29 @@
    jobtracker (job-tracker-node settings)
    settings (m-result
              (assoc settings
-               :name-node-ip (or (private-ip namenode)
-                                 (primary-ip namenode))
-               :job-tracker-ip (or (private-ip jobtracker)
-                                   (primary-ip jobtracker))
-               :name-node-hostname (hostname namenode)
-               :job-tracker-hostname (hostname jobtracker)))
-   ;; second pass
-   core-settings (core-settings (:version settings) settings)
-   hdfs-settings (hdfs-settings (:version settings) settings)
-   mapred-settings (mapred-settings (:version settings) settings)
-   metrics-settings (metrics-settings (:version settings) settings)
+               :namenode-ip (or (private-ip namenode)
+                                (primary-ip namenode))
+               :jobtracker-ip (or (private-ip jobtracker)
+                                  (primary-ip jobtracker))
+               :namenode-hostname (hostname namenode)
+               :jobtracker-hostname (hostname jobtracker)))
+   install-config (install-config (:version settings) settings)
+   metrics-config (metrics-config (:version settings) settings)
+   env-vars (m-result (properties->env-vars config))
    settings (m-result
              (-> settings
-                 (update-in [:core-site] #(merge core-settings %))
-                 (update-in [:hdfs-site] #(merge hdfs-settings %))
-                 (update-in [:mapred-site] #(merge mapred-settings %))
-                 (update-in [:metrics] #(merge metrics-settings %))
+                 (update-in [:config] #(merge install-config %))
+                 (update-in [:metrics] #(merge metrics-config %))
                  (update-in
                   [:env-vars]
-                  #(merge (or % {})
-                     {:HADOOP_PID_DIR (:pid-dir settings)
-                      :HADOOP_LOG_DIR (:log-dir settings)
-                      :HADOOP_SSH_OPTS "-o StrictHostKeyChecking=no"
-                      :HADOOP_OPTS "-Djava.net.preferIPv4Stack=true"}))))]
+                  #(merge-with
+                    env-var-merge
+                    {:HADOOP_PID_DIR (:pid-dir settings)
+                     :HADOOP_LOG_DIR (:log-dir settings)
+                     :HADOOP_SSH_OPTS "-o StrictHostKeyChecking=no"
+                     :HADOOP_OPTS "-Djava.net.preferIPv4Stack=true"}
+                    %
+                    env-vars))))]
   (update-settings
    :hadoop {:instance-id instance-id}
    (partial merge-keys merge-settings-algorithm) settings))
@@ -263,7 +315,7 @@ map entry."
   property to true to have it marked final."
   [properties]
   (element
-   :configuration {} (map #(property-xml %) properties)))
+   :configuration {} (map property-xml properties)))
 
 (defn configuration-xml
   "Returns a string with configuration XML for the given properties and final
@@ -292,11 +344,15 @@ map entry."
 (def-plan-fn settings-config-file
   "Write an XML config file based on settings."
   [config-key {:keys [instance-id]}]
-  [{:keys [home user] :as settings}
-   (get-settings :hadoop {:instance-id instance-id})]
+  (m-result (clojure.tools.logging/debugf "settings-config-file"))
+  [{:keys [home user config] :as settings}
+   (get-settings :hadoop {:instance-id instance-id})
+   _   (m-result (clojure.tools.logging/debugf "config %s" config))
+   config (m-result (config-for config config-key))]
+  (m-result (clojure.tools.logging/debugf "config %s" config))
   (hadoop-config-file
    settings (str (name config-key) ".xml")
-   {:content (configuration-xml (get settings config-key))
+   {:content (configuration-xml config)
     :literal false}))
 
 (def properties-file
@@ -474,26 +530,28 @@ already running."
    #(directory (str %) :owner owner :group group :recursive false)
    (map
     #(get-in settings %)
-    [[:hdfs-site :dfs.data.dir]
-     [:hdfs-site :dfs.name.dir]
-     [:core-site :fs.checkpoint.dir]
-     [:mapred-site :mapred.local.dir]
-     [:mapred-site :mapred.system.dir]])))
+    [[:config :dfs.data.dir]
+     [:config :dfs.name.dir]
+     [:config :fs.checkpoint.dir]
+     [:config :mapred.local.dir]
+     [:config :mapred.system.dir]])))
 
 (defn hdfs-node
   "A hdfs server-spec. Settings as for hadoop-settings."
-  [settings {:keys [instance-id] :as opts}]
+  [settings-fn {:keys [instance-id] :as opts}]
   (server-spec
-   :roles #{:data-node}
+   :roles #{:datanode}
    :phases
-   {:settings (plan-fn (hadoop-settings settings))
+   {:settings (plan-fn
+               [settings settings-fn]
+               (hadoop-settings settings))
     :install (plan-fn
               (local-dirs opts))
     :configure (plan-fn
                 "hdfs-node-configure"
                 (setup-etc-hosts
-                 [:hdfs-node :name-node :secondary-name-node :job-tracker
-                  :data-node :task-tracker])
+                 [:hdfs-node :namenode :secondary-namenode :jobtracker
+                  :datanode :tasktracker])
                 (settings-config-file :hdfs-site opts)
                 (env-file opts))}))
 
@@ -501,25 +559,27 @@ already running."
   "Returns a server-spec that authorises the jobtracker for ssh."
   [{:keys [instance-id] :as opts}]
   (server-spec
-   :phases {:configure (plan-fn (authorize-role :job-tracker opts))}))
+   :phases {:configure (plan-fn (authorize-role :jobtracker opts))}))
 
 (def config-file-for-role
   {:hdfs-node :hdfs-site
-   :name-node :core-site
-   :secondary-name-node :core-site
-   :job-tracker :mapred-site
-   :data-node :core-site
-   :task-tracker :mapred-site})
+   :namenode :core-site
+   :secondary-namenode :core-site
+   :jobtracker :mapred-site
+   :datanode :core-site
+   :tasktracker :mapred-site})
 
 (defn hadoop-role-spec
   "Returns a server-spec implementing the specified Hadoop server."
-  [settings {:keys [instance-id] :as opts} role service-name
+  [settings-fn {:keys [instance-id] :as opts} role service-name
    service-description & extends]
   (server-spec
    :roles #{role}
-   :extends (vec (map #(% settings opts) extends))
+   :extends (vec (map #(% settings-fn opts) extends))
    :phases
-   {:settings (plan-fn (hadoop-settings settings))
+   {:settings (plan-fn
+               [settings settings-fn]
+               (hadoop-settings settings))
     :install (plan-fn
               (hadoop-user opts)
               (create-directories opts)
@@ -538,41 +598,41 @@ already running."
   (fn [role settings & {:keys [instance-id] :as opts}] role))
 
 ;; A namenode server-spec. Settings as for hadoop-settings.
-(defmethod hadoop-server-spec :name-node
-  [_ settings & {:keys [instance-id] :as opts}]
+(defmethod hadoop-server-spec :namenode
+  [_ settings-fn & {:keys [instance-id] :as opts}]
   (server-spec
    :extends [(hadoop-role-spec
-              settings opts :name-node "namenode" "Name Node" hdfs-node)]
+              settings-fn opts :namenode "namenode" "Name Node" hdfs-node)]
    :phases {:configure (plan-fn "format-hdfs" (format-hdfs {} opts))
             :init (plan-fn (initialise-hdfs opts))}))
 
 ;; A secondary namenode server-spec. Settings as for hadoop-settings.
-(defmethod hadoop-server-spec :secondary-name-node
+(defmethod hadoop-server-spec :secondary-namenode
   [_ settings & {:keys [instance-id] :as opts}]
   (hadoop-role-spec
    settings opts
-   :secondary-name-node "secondarynamenode" "Secondary Name Node"))
+   :secondary-namenode "secondary-namenode" "Secondary Name Node"))
 
 ;; Returns a job tracker server-spec. Settings as for hadoop-settings.
-(defmethod hadoop-server-spec :job-tracker
+(defmethod hadoop-server-spec :jobtracker
   [_ settings & {:keys [instance-id] :as opts}]
   (server-spec
    :extends [(hadoop-role-spec
-              settings opts :job-tracker "jobtracker" "Job Tracker")]
+              settings opts :jobtracker "jobtracker" "Job Tracker")]
    :phases {:install (install-ssh-key opts)
             :configure (ssh-key opts)
             :collect-ssh-keys (ssh-key opts)}))
 
 ;; A data node server-spec. Settings as for hadoop-settings.
-(defmethod hadoop-server-spec :data-node
+(defmethod hadoop-server-spec :datanode
   [_ settings & {:keys [instance-id] :as opts}]
   (hadoop-role-spec
-   settings opts :data-node "datanode" "Data Node" hdfs-node))
+   settings opts :datanode "datanode" "Data Node" hdfs-node))
 
 ;; A task tracker server-spec. Settings as for hadoop-settings.
-(defmethod hadoop-server-spec :task-tracker
+(defmethod hadoop-server-spec :tasktracker
   [_ settings & {:keys [instance-id] :as opts}]
   (server-spec
    :extends [(enable-jobtracker-ssh-spec opts)
              (hadoop-role-spec
-              settings opts :task-tracker "tasktracker" "Task Tracker")]))
+              settings opts :tasktracker "tasktracker" "Task Tracker")]))

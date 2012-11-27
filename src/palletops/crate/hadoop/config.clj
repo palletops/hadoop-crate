@@ -3,15 +3,19 @@
 
 (ns palletops.crate.hadoop.config
   (:use
+   [clojure.tools.logging :only [errorf]]
    [clojure.string :only [join]]
    [pallet.crate
     :only [defplan def-plan-fn assoc-settings get-settings defmethod-plan
-           nodes-with-role]]
-   [pallet.node :only [primary-ip]]
+           nodes-with-role target-node target]]
+   [palletops.crate.hadoop.rules :only [defrules config]]
+   [pallet.node :only [primary-ip hardware]]
    [pallet.script.lib :only [user-home]]
    [pallet.stevedore :only [script]]
    [pallet.version-dispatch
-    :only [defmulti-version-plan defmethod-version-plan]]))
+    :only [defmulti-version-plan defmethod-version-plan]])
+  (:require
+   [clojure.core.logic :as logic]))
 
 ;;; # Final Properties
 (defprotocol FinalProperty
@@ -36,72 +40,50 @@
   (let [home (script (~user-home ~user))]
     (str home "/" (join "/" components))))
 
-;;; # Settings
-;;; These need to use the node cpu, disk and memory details
+(defn config-set
+  "Specify the config file for a property."
+  [property]
+  (let [n (name property)]
+    (cond
+     (.startsWith n "mapred.") :mapred-site
+     (.startsWith n "tasktracker.") :mapred-site
+     (.startsWith n "dfs.") :hdfs-site
+     (.startsWith n "fs.") :core-site
+     (.startsWith n "io.") :core-site
+     (.startsWith n "hadoop.") :core-site
+     (.startsWith n "pallet.") nil
+     (.startsWith n "kernel.") nil
+     :else (errorf "Failed to classify property %s" property))))
 
-;;; ## Core settings
-(defmulti-version-plan core-settings [version settings])
+(defn config-for
+  "Returns the settings for a specific hadoop component
+   (:core-site, :mapred-site, hdfs-site)."
+  [config component]
+  (into {} (filter #(= component (config-set (key %))) config)))
+
+;;; ## Configuration settings dependent on install locations, etc
+(defmulti-version-plan install-config [version settings])
 
 (defmethod-version-plan
-    core-settings {:os :linux :version [[0 20 0] [0 20 99]]}
-    [os os-version version {:keys [owner name-node-hostname] :as settings}]
+    install-config {:os :linux :version [[0 20 0] [0 20 99]]}
+    [os os-version version
+     {:keys [owner namenode-hostname jobtracker-hostname] :as settings}]
   (m-result
    {:fs.checkpoint.dir (user-file owner "/dfs/secondary")
-    :fs.default.name (format "hdfs://%s:8020" name-node-hostname)
-    :fs.trash.interval 1440
-    :io.file.buffer.size 65536
+    :fs.default.name (format "hdfs://%s:8020" namenode-hostname)
     :hadoop.tmp.dir "/tmp/hadoop"
-    :hadoop.rpc.socket.factory.class.default
-    "org.apache.hadoop.net.StandardSocketFactory"
-    :hadoop.rpc.socket.factory.class.ClientProtocol ""
-    :hadoop.rpc.socket.factory.class.JobSubmissionProtocol ""
-    :io.compression.codecs (str
-                            "org.apache.hadoop.io.compress.DefaultCodec,"
-                            "org.apache.hadoop.io.compress.GzipCodec")}))
-
-;;; ## HDFS settings
-(defmulti-version-plan hdfs-settings [version settings])
-
-(defmethod-version-plan
-    hdfs-settings {:os :linux :version [[0 20 0] [0 20 99]]}
-    [os os-version version {:keys [owner] :as settings}]
-  (m-result
-   {:dfs.data.dir (final-value (user-file owner "dfs/data"))
+    :dfs.data.dir (final-value (user-file owner "dfs/data"))
     :dfs.name.dir (final-value (user-file owner "dfs/name"))
-    :dfs.datanode.du.reserved 1073741824
-    :dfs.namenode.handler.count 10
-    :dfs.permissions.enabled true
-    :dfs.replication 3
-    :dfs.datanode.max.xcievers 4096}))
-
-;;; ## MapRed settings
-(defmulti-version-plan mapred-settings [version settings])
-
-(defmethod-version-plan
-    mapred-settings {:os :linux :version [[0 20 0] [0 20 99]]}
-  [os os-version version {:keys [owner job-tracker-hostname] :as settings}]
-  (m-result
-   {:tasktracker.http.threads (final-value 46)
     :mapred.local.dir (final-value (user-file owner "mapred/local"))
     :mapred.system.dir (final-value (user-file owner "mapred/system"))
-    :mapred.child.java.opts "-Xmx550m"
-    :mapred.job.tracker (format "%s:8021" job-tracker-hostname)
-    :mapred.job.tracker.handler.count 10
-    :mapred.map.tasks.speculative.execution true
-    :mapred.reduce.tasks.speculative.execution false
-    :mapred.reduce.parallel.copies 10
-    :mapred.reduce.tasks 5
-    :mapred.submit.replication 10
-    :mapred.tasktracker.map.tasks.maximum 2
-    :mapred.tasktracker.reduce.tasks.maximum 1
-    :mapred.compress.map.output true
-    :mapred.output.compression.type "BLOCK"}))
+    :mapred.job.tracker (format "%s:8021" jobtracker-hostname)
+    }))
 
-(defmulti-version-plan metrics-settings [version settings])
+(defmulti-version-plan metrics-config [version settings])
 
 (defmethod-version-plan
-    metrics-settings {:os :linux :version [[0 20 0] [0 20 99]]}
-  [os os-version version {:keys [owner job-tracker-hostname] :as settings}]
+    metrics-config {:os :linux :version [[0 20 0] [0 20 99]]}
+  [os os-version version {:keys [owner jobtracker-hostname] :as settings}]
   (m-result
    {:dfs.class "org.apache.hadoop.metrics.spi.NoEmitMetricsContext"
     :dfs.period 10
