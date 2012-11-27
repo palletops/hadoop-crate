@@ -6,9 +6,10 @@
 (ns palletops.crate.hadoop
   "A pallet crate for installing hadoop"
   (:use
-   [clojure.string :only [join]]
-   [clojure.data.xml :only [element indent-str]]
    [clojure.algo.monads :only [m-map]]
+   [clojure.data.xml :only [element indent-str]]
+   [clojure.string :only [join upper-case] :as string]
+   [clojure.tools.logging :only [debugf]]
    [pallet.action :only [with-action-options]]
    [pallet.actions
     :only [directory exec-checked-script exec-script remote-directory
@@ -142,29 +143,83 @@
   [:namenode :jobtracker :datanode :tasktracker :secondary-namenode
    :balancer])
 
-(def property-env-vars
-  [["pallet.%s.mx" "HADOOP_%s_OPTS" "-Xmx%sm"]])
+(def ^{:doc "A sequence of all hadoop roles"}
+  hadoop-role-env-vars
+  (->
+   (into {}
+         (map
+          #(vector
+            %
+            (format
+             "HADOOP_%s_OPTS"
+             (upper-case (string/replace (name %) "-" ""))))
+          hadoop-roles))))
 
-(defn role-properties->env-vars
- "Convert pallet properties to hadoop environment variables."
- [env-vars role config]
- (reduce
-  (fn [env-vars [property-fmt var-fmt value-fmt]]
-    (let [property (keyword (format property-fmt (name role)))]
-      (if-let [value (property config)]
-        (let [var (keyword (format var-fmt (name role)))
-              val (format value-fmt value)]
-          (update-in env-vars [var] #(str (if % (str % " ") "") val)))
-        env-vars)))
-  env-vars
-  property-env-vars))
+(def java-system-properties
+  {:jmx-authenticate "com.sun.management.jmxremote.authenticate"
+   :jmx-password-file "com.sun.management.jmxremote.password.file"
+   :jmx-port "com.sun.management.jmxremote.port"
+   :jmx "com.sun.management.jmxremote"
+   :jmx-ssl "com.sun.management.jmxremote.ssl"
+   :jmx-ssl-registry "com.sun.management.jmxremote.registry.ssl"
+   :jmx-ssl-client-auth "com.sun.management.jmxremote.ssl.need.client.auth"
+   :key-store "javax.net.ssl.keyStore"
+   :key-store-type "javax.net.ssl.keyStoreType"
+   :key-store-password "javax.net.ssl.keyStorePassword"
+   :trust-store "javax.net.ssl.trustStore"
+   :trust-store-type "javax.net.ssl.trustStoreType"
+   :trust-store-password "javax.net.ssl.trustStorePassword"})
+
+(defn java-system-property
+  "Return a java argument string to set the system properties specified in
+   `options`."
+  [property value]
+  (format "-D%s%s" property (if (nil? value) "" (str "=" value))))
+
+(def property-env-vars
+  {:mx "-Xmx%sm"})
+
+(defn env-var-update
+  [v w]
+  (str (if v (str v " ") "") w))
+
+(defn role-properties->option-env-vars
+  "Convert pallet properties to hadoop environment variables."
+  [env-vars role config]
+  (reduce
+   (fn [env-vars [kw value-fmt]]
+     (let [value (get-in config [:pallet role kw] ::not-found)]
+       (if (= ::not-found value)
+         env-vars
+         (let [var (hadoop-role-env-vars role)
+               val (format value-fmt value)]
+           (update-in env-vars [var] env-var-update val)))))
+   env-vars
+   property-env-vars))
+
+(defn role-properties->property-env-vars
+  "Convert pallet properties to hadoop environment variables."
+  [env-vars role config]
+  (reduce
+   (fn [env-vars [kw property]]
+     (let [value (get-in config [:pallet role kw] ::not-found)]
+       (if (= ::not-found value)
+         env-vars
+         (let [var (hadoop-role-env-vars role)]
+           (update-in env-vars [var]
+                      env-var-update (java-system-property property value))))))
+   env-vars
+   java-system-properties))
 
 (defn properties->env-vars
  "Convert pallet properties to hadoop environment variables."
  [config]
  (reduce
   (fn [env-vars role]
-    (role-properties->env-vars env-vars role config))
+    (->
+     env-vars
+     (role-properties->option-env-vars role config)
+     (role-properties->property-env-vars role config)))
   {}
   hadoop-roles))
 
@@ -240,13 +295,10 @@
          (apply concat (merge {:owner owner :group group}
                               (:remote-directory settings)))))
 
-(require 'pallet.debug)
-
 (def-plan-fn install-hadoop
   "Install hadoop."
   [& {:keys [instance-id]}]
   [settings (get-settings :hadoop {:instance-id instance-id})]
-  (pallet.debug/debugf "install-hadoop %s" settings)
   (install :hadoop instance-id))
 
 ;;; ## User
@@ -344,12 +396,9 @@ map entry."
 (def-plan-fn settings-config-file
   "Write an XML config file based on settings."
   [config-key {:keys [instance-id]}]
-  (m-result (clojure.tools.logging/debugf "settings-config-file"))
   [{:keys [home user config] :as settings}
    (get-settings :hadoop {:instance-id instance-id})
-   _   (m-result (clojure.tools.logging/debugf "config %s" config))
    config (m-result (config-for config config-key))]
-  (m-result (clojure.tools.logging/debugf "config %s" config))
   (hadoop-config-file
    settings (str (name config-key) ".xml")
    {:content (configuration-xml config)
