@@ -60,38 +60,3 @@
    (:core-site, :mapred-site, hdfs-site)."
   [config component]
   (into {} (filter #(= component (config-set (key %))) config)))
-
-;;; ## Configuration settings dependent on install locations, etc
-(defmulti-version-plan install-config [version settings])
-
-(defmethod-version-plan
-    install-config {:os :linux :version [[0 20 0] [0 20 99]]}
-    [os os-version version
-     {:keys [owner namenode-hostname jobtracker-hostname] :as settings}]
-  (m-result
-   {:fs.checkpoint.dir (user-file owner "/dfs/secondary")
-    :fs.default.name (format "hdfs://%s:8020" namenode-hostname)
-    :hadoop.tmp.dir "/tmp/hadoop"
-    :dfs.data.dir (final-value (user-file owner "dfs/data"))
-    :dfs.name.dir (final-value (user-file owner "dfs/name"))
-    :mapred.local.dir (final-value (user-file owner "mapred/local"))
-    :mapred.system.dir (final-value (user-file owner "mapred/system"))
-    :mapred.job.tracker (format "%s:8021" jobtracker-hostname)
-    }))
-
-(defmulti-version-plan metrics-config [version settings])
-
-(defmethod-version-plan
-    metrics-config {:os :linux :version [[0 20 0] [0 20 99]]}
-  [os os-version version {:keys [owner jobtracker-hostname] :as settings}]
-  (m-result
-   {:dfs.class "org.apache.hadoop.metrics.spi.NoEmitMetricsContext"
-    :dfs.period 10
-    :mapred.class "org.apache.hadoop.metrics.spi.NoEmitMetricsContext"
-    :mapred.period 10
-    :jvm.class "org.apache.hadoop.metrics.spi.NoEmitMetricsContext"
-    :jvm.period 10
-    :ugi.class "org.apache.hadoop.metrics.spi.NoEmitMetricsContext"
-    :ugi.period 10
-    :fairscheduler.class "org.apache.hadoop.metrics.spi.NoEmitMetricsContext"
-    :fairscheduler.period 10}))
