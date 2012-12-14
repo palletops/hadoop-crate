@@ -12,7 +12,8 @@
    [pallet.action :only [with-action-options]]
    [pallet.actions
     :only [directory exec-checked-script exec-script remote-directory
-           remote-file symbolic-link user group assoc-settings update-settings]
+           remote-file symbolic-link user group assoc-settings update-settings
+           on-one-node]
     :rename {user user-action group group-action
              assoc-settings assoc-settings-action
              update-settings update-settings-action}]
@@ -127,6 +128,48 @@
    nodes (nodes-with-role role)]
   (m-map #(authorize-node % options) (map :node nodes)))
 
+;;; # Jobs
+(defn single-quote [s] (str "'" s "'"))
+
+(def-plan-fn hadoop-jar
+  "Runs a hadoop jar.
+
+`:jar`
+: Specifies a map of remote-file options for the location of the jar to run.
+
+`:main`
+: Specifies the jar main class to run
+
+`:input`
+: Specifies the input data location.
+
+`:output`
+: Specifies the output data location.
+
+`:args`
+: Specifies additional arguments
+"
+  [{:keys [jar input output main args]}]
+  [{:keys [home] :as settings} (get-settings :hadoop {})
+   filename (m-result (str (gensym "job") ".jar"))]
+  (with-action-options {:script-dir home}
+    (on-one-node
+     [:jobtracker]
+     (apply-map remote-file filename jar)
+     (hadoop-exec
+      "jar" filename main
+      (if input (single-quote input) "")
+      (if output (single-quote output) "")
+      ~@args))))
+
+(def-plan-fn s3distcp-url
+  "The s3distcp url"
+  [{:keys [region version] :or {version "1.latest"}}]
+  (m-result
+   (format
+    "https://%selasticmapreduce.s3.amazonaws.com/libs/s3distcp/%s/s3distcp.jar"
+    (if region (str region ".") "")
+    version)))
 
 
 ;;; # HDFS
