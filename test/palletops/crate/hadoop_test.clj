@@ -59,8 +59,8 @@
     (is (= (first
             (build-actions {:phase-context "hadoop-service"}
               (exec-checked-script
-               ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
                (str "stop hadoop daemon: namenode")
+               ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
                ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
                 stop namenode))))
            (first

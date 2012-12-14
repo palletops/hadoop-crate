@@ -31,7 +31,7 @@
    [pallet.crate-install :only [install]]
    [palletops.crate.hadoop.base
     :only [env-file hadoop-env-script hadoop-role-spec
-           hadoop-settings setup-etc-hosts settings-config-file]]
+           setup-etc-hosts settings-config-file]]
    [palletops.crate.hadoop.config :only [config-for final?]]
    [palletops.locos :only [apply-productions]]
    [pallet.map-merge :only [merge-key merge-keys]]
@@ -79,7 +79,8 @@
     (alias-var name var)))
 
 (alias-ns 'palletops.crate.hadoop.base
-          :only '[hadoop-server-spec hadoop-exec hadoop-rmdir hadoop-mkdir])
+          :only '[hadoop-server-spec hadoop-exec hadoop-rmdir hadoop-mkdir
+                  hadoop-settings hadoop-service install-hadoop])
 
 ;;; # Cluster Support
 (def-plan-fn namenode-node

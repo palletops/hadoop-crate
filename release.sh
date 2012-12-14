@@ -16,10 +16,10 @@ echo "Start release of $version, previous version is $previous_version"
 echo ""
 echo ""
 
-lein do clean, test && \
+lein do with-profile +palletops clean, with-profile +palletops test && \
 git flow release start $version || exit 1
 
-lein with-profile release set-version ${version} :previous-version ${previous_version} \
+lein with-profile +release,+palletops set-version ${version} :previous-version ${previous_version} \
   || { echo "set version failed" >2 ; exit 1; }
 
 echo ""
@@ -39,9 +39,9 @@ echo -n "commiting project.clj, release notes and readme.  enter to continue:" \
 && git add project.clj ReleaseNotes.md README.md \
 && git commit -m "Updated project.clj, release notes and readme for $version" \
 && echo -n "Peform release.  enter to continue:" && read x \
-&& lein do clean, test, with-profile +palletops deploy palletops \
+&& lein do with-profile +palletops clean, with-profile +palletops test, with-profile +palletops deploy palletops \
 && git flow release finish $version \
 && echo "Now push to github. Don't forget the tags!" \
-&& lein with-profile release set-version ${next_version} \
+&& lein with-profile +release,+palletops set-version ${next_version} \
 && git add project.clj \
 && git commit -m "Updated version for next release cycle"
