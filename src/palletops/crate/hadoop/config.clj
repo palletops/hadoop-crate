@@ -45,6 +45,8 @@
   [property]
   (let [n (name property)]
     (cond
+     (re-matches #"[^.]+\.class" n) :metrics
+     (re-matches #"[^.]+\.period" n) :metrics
      (.startsWith n "mapred.") :mapred-site
      (.startsWith n "tasktracker.") :mapred-site
      (.startsWith n "dfs.") :hdfs-site
