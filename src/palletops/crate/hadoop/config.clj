@@ -55,7 +55,7 @@
      (.startsWith n "hadoop.") :core-site
      (.startsWith n "pallet.") nil
      (.startsWith n "kernel.") nil
-     :else (errorf "Failed to classify property %s" property))))
+     :else (debugf "Failed to classify property %s" property))))
 
 (defn config-for
   "Returns the settings for a specific hadoop component
