@@ -8,12 +8,13 @@
    [pathetic.core :only [render-path]]))
 
 (def cloudera-hadoop-version
-  {"3.0" "0.20.2"})
+  {"3.0" "0.20.2"
+   "3.5" "0.20.2"})
 
 ;;; multiple versions of cloudera may correspond to a single hadoop version, so
 ;;; this map is not just the inverse of cloudera-hadoop-version
 (def hadoop-cloudera-version
-  {"0.20.2" "3.0"})
+  {"0.20.2" "3.5"})
 
 (defrules cloudera-rules
   ^{:name :cloudera-home}
@@ -24,7 +25,7 @@
   ^{:name :cloudera-default-cloudera-version}
   [{:version !_
     :cloudera-version !_}
-   {:cloudera-version "3.0"}]
+   {:cloudera-version "3.5"}]
 
   ^{:name :cloudera-default-cloudera-version}
   [{:version ?v
