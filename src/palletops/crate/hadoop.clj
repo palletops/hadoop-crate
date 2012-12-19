@@ -158,11 +158,12 @@
     (on-one-node
      [:jobtracker]
      (apply-map remote-file filename jar)
-     (hadoop-exec
+     (apply
+      hadoop-exec
       "jar" filename main
       (if input (single-quote input) "")
       (if output (single-quote output) "")
-      ~@args))))
+      args))))
 
 (def-plan-fn s3distcp-url
   "The s3distcp url"
