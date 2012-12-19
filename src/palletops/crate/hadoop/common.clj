@@ -31,12 +31,12 @@
 
   ^{:name :fs-default-name}
   [{:fs.default.name !_
-    :hostnames {:namenode ?n}}
+    :ips {:namenode ?n}}
    {:fs.default.name (format "hdfs://%s:8020" (first ?n))}]
 
   ^{:name :mapred-job-tracker}
   [{:fs.default.name !_
-    :hostnames {:jobtracker ?j}}
+    :ips {:jobtracker ?j}}
    {:mapred.job.tracker (format "%s:8021" (first ?j))}]
 
   ^{:name :hadoop-tmp}
