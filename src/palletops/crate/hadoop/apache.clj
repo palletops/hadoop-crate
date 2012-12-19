@@ -1,7 +1,8 @@
 (ns palletops.crate.hadoop.apache
   "Apache specific support for the hadoop crate."
   (:use
-   [palletops.crate.hadoop.base :only [dist-rules install-dist url]]
+   [palletops.crate.hadoop.base
+    :only [dist-rules hadoop-role-ports install-dist url]]
    [palletops.locos :only [defrules apply-productions !_]]
    [pathetic.core :only [render-path]]))
 
@@ -30,3 +31,33 @@
     (assoc settings
       :install-strategy :palletops.crate.hadoop.base/remote-directory
       :remote-directory {:url url :md5-url md5-url})))
+
+(defmethod hadoop-role-ports :namenode
+  [role]
+  {:external [50070]
+   :internal [8020]})
+
+(defmethod hadoop-role-ports :datanode
+  [role]
+  {:external [50075]
+   :internal [50010 50020]})
+
+(defmethod hadoop-role-ports :secondary-namenode
+  [role]
+  {:external [50090]
+   :internal []})
+
+(defmethod hadoop-role-ports :jobtracker
+  [role]
+  {:external [50030]
+   :internal [8021]})
+
+(defmethod hadoop-role-ports :tasktracker
+  [role]
+  {:external [50060]
+   :internal [8021]})
+
+(defmethod hadoop-role-ports :backup
+  [role]
+  {:external [50105]
+   :internal [50100]})

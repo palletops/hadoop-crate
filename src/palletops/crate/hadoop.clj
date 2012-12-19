@@ -80,7 +80,8 @@
 
 (alias-ns 'palletops.crate.hadoop.base
           :only '[hadoop-server-spec hadoop-exec hadoop-rmdir hadoop-mkdir
-                  hadoop-settings hadoop-service install-hadoop])
+                  hadoop-settings hadoop-service install-hadoop
+                  hadoop-role-ports])
 
 ;;; # Cluster Support
 (def-plan-fn namenode-node

@@ -582,3 +582,7 @@ already running."
           (hadoop-service
            service-name
            (merge {:description service-description} opts)))}))
+
+(defmulti hadoop-role-ports
+  "Returns ports used by the specified role"
+  (fn [role] role))
