@@ -1,6 +1,8 @@
 (ns palletops.crate.hadoop.cloudera
   "Cloudera specific support for the hadoop crate."
   (:use
+   [clojure.string :only [join] :as string]
+   [pallet.versions :only [as-version-vector version-string]]
    [palletops.crate.hadoop.base :only [dist-rules install-dist url]]
    [palletops.locos :only [defrules apply-productions !_]]
    [pathetic.core :only [render-path]]))
@@ -41,6 +43,18 @@
    {:config-dir (render-path [?h "conf"])}])
 
 (swap! dist-rules concat cloudera-rules)
+
+(defmethod url :cloudera
+  [{:keys [cloudera-version version dist-urls]}]
+  (let [cdh-version (as-version-vector cloudera-version)
+        major-version (first cdh-version)
+        url (format
+             "%scdh/%s/hadoop-%s-cdh%s.tar.gz"
+             (:cloudera dist-urls)
+             major-version
+             version
+             (join "u" cdh-version))]
+    [url nil]))                         ; cloudera don't provide md5's :(
 
 (defmethod install-dist :cloudera
   [_ target settings]

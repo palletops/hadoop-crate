@@ -77,18 +77,6 @@
              (:apache dist-urls) version)]
     [url (str url ".md5")]))
 
-(defmethod url :cloudera
-  [{:keys [cloudera-version version dist-urls]}]
-  (let [cdh-version (as-version-vector cloudera-version)
-        major-version (first cdh-version)
-        url (format
-             "%s/cdh/%s/hadoop-%s-cdh%s.tar.gz"
-             (:cloudera dist-urls)
-             major-version
-             version
-             (join "u" cdh-version))]
-    [url nil]))                         ; cloudera don't provide md5's :(
-
 ;;; At the moment we just have a single implementation of settings,
 ;;; but again, this is open-coded.
 (defmulti-version-plan install-settings [version settings])
