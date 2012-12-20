@@ -3,7 +3,7 @@
 
 (ns palletops.crate.hadoop.config
   (:use
-   [clojure.tools.logging :only [errorf]]
+   [clojure.tools.logging :only [debugf errorf]]
    [clojure.string :only [join]]
    [pallet.crate
     :only [defplan def-plan-fn assoc-settings get-settings defmethod-plan
