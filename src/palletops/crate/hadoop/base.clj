@@ -13,12 +13,14 @@
              assoc-settings assoc-settings-action
              update-settings update-settings-action}]
    [pallet.api :only [plan-fn server-spec]]
+   [pallet.compute :only [service-properties]]
    [pallet.config-file.format :only [name-values]]
    [pallet.crate
     :only [def-plan-fn assoc-settings update-settings
            defmethod-plan get-settings
            get-node-settings group-name nodes-with-role target-id
-           role->nodes-map target target-name]]
+           role->nodes-map target target-name
+           compute-service]]
    [pallet.crate-install :only [install]]
    [pallet.crate.etc-default :only [write] :rename {write write-etc}]
    [pallet.crate.etc-hosts :only [hosts hosts-for-role] :as etc-hosts]
@@ -262,9 +264,19 @@ kernel.* Properties
     :or {rules @dist-rules}
     :as settings}]
   [role-maps (role-maps)
+   service compute-service
+   service (m-result (service-properties service))
+   _ (m-result (debugf "service is %s" service))
    settings (m-result (base-settings
                        settings
-                       (deep-merge (default-settings) role-maps)
+                       (deep-merge
+                        (when (= :aws-ec2 (:provider service))
+                          {:fs.s3.awsAccessKeyId (:identity service)
+                           :fs.s3.awsSecretAccessKey (:credential service)
+                           :fs.s3n.awsAccessKeyId (:identity service)
+                           :fs.s3n.awsSecretAccessKey (:credential service)})
+                        (default-settings)
+                        role-maps)
                        rules))
    _ (m-result (debugf "hadoop settings in %s" settings))
    _ (m-result
