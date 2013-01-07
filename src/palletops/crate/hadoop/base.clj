@@ -3,7 +3,7 @@
   (:use
    [clojure.data.xml :only [element indent-str]]
    [clojure.string :only [join upper-case] :as string]
-   [clojure.tools.logging :only [debugf]]
+   [clojure.tools.logging :only [debugf tracef]]
    [pallet.action :only [with-action-options]]
    [pallet.actions
     :only [directory exec-checked-script exec-script remote-directory
@@ -207,10 +207,10 @@
   "Return the base settings given some specified initial settings, some
    defaults and a set of rules to apply."
   [initial defaults rules]
-  (debugf "hadoop initial settings %s" initial)
-  (debugf "hadoop defaults settings %s" defaults)
-  (debugf "hadoop merged settings %s" (merge defaults initial))
-  (debugf "hadoop rules %s" (vec rules))
+  (tracef "hadoop initial settings %s" initial)
+  (tracef "hadoop defaults settings %s" defaults)
+  (tracef "hadoop merged settings %s" (merge defaults initial))
+  (tracef "hadoop rules %s" (vec rules))
   (apply-productions (merge defaults initial) rules))
 
 (def-plan-fn role-maps
@@ -266,7 +266,7 @@ kernel.* Properties
   [role-maps (role-maps)
    service compute-service
    service (m-result (when service (service-properties service)))
-   _ (m-result (debugf "service is %s" service))
+   _ (m-result (tracef "service is %s" service))
    settings (m-result (base-settings
                        settings
                        (deep-merge
@@ -278,9 +278,9 @@ kernel.* Properties
                         (default-settings)
                         role-maps)
                        rules))
-   _ (m-result (debugf "hadoop settings in %s" settings))
+   _ (m-result (tracef "hadoop settings in %s" settings))
    _ (m-result
-      (debugf "hadoop settings applied rules %s" (-> settings meta :rules vec)))
+      (tracef "hadoop settings applied rules %s" (-> settings meta :rules vec)))
    settings (install-settings (:version settings) settings)
 
    env-vars (m-result (properties->env-vars settings))
@@ -299,7 +299,7 @@ kernel.* Properties
                      :HADOOP_OPTS "-Djava.net.preferIPv4Stack=true"}
                     %
                     env-vars))))]
-  (m-result (debugf "hadoop settings out %s" settings))
+  (m-result (tracef "hadoop settings out %s" settings))
   (update-settings
    :hadoop {:instance-id instance-id}
    (partial merge-keys merge-settings-algorithm)

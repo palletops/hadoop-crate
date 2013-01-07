@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.1.2
+
+- Reduce potentially sensitive logs to trace
+
 ## 0.1.1
 
 - Allow for running tests without a compute service
