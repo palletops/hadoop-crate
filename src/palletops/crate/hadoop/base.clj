@@ -13,12 +13,14 @@
              assoc-settings assoc-settings-action
              update-settings update-settings-action}]
    [pallet.api :only [plan-fn server-spec]]
+   [pallet.compute :only [service-properties]]
    [pallet.config-file.format :only [name-values]]
    [pallet.crate
     :only [def-plan-fn assoc-settings update-settings
            defmethod-plan get-settings
            get-node-settings group-name nodes-with-role target-id
-           role->nodes-map target target-name]]
+           role->nodes-map target target-name
+           compute-service]]
    [pallet.crate-install :only [install]]
    [pallet.crate.etc-default :only [write] :rename {write write-etc}]
    [pallet.crate.etc-hosts :only [hosts hosts-for-role] :as etc-hosts]
@@ -76,18 +78,6 @@
              "%$1s/hadoop/core/hadoop-%$2s/hadoop-%$2s.tar.gz"
              (:apache dist-urls) version)]
     [url (str url ".md5")]))
-
-(defmethod url :cloudera
-  [{:keys [cloudera-version version dist-urls]}]
-  (let [cdh-version (as-version-vector cloudera-version)
-        major-version (first cdh-version)
-        url (format
-             "%s/cdh/%s/hadoop-%s-cdh%s.tar.gz"
-             (:cloudera dist-urls)
-             major-version
-             version
-             (join "u" cdh-version))]
-    [url nil]))                         ; cloudera don't provide md5's :(
 
 ;;; At the moment we just have a single implementation of settings,
 ;;; but again, this is open-coded.
@@ -274,9 +264,19 @@ kernel.* Properties
     :or {rules @dist-rules}
     :as settings}]
   [role-maps (role-maps)
+   service compute-service
+   service (m-result (when service (service-properties service)))
+   _ (m-result (debugf "service is %s" service))
    settings (m-result (base-settings
                        settings
-                       (deep-merge (default-settings) role-maps)
+                       (deep-merge
+                        (when (= :aws-ec2 (:provider service))
+                          {:fs.s3.awsAccessKeyId (:identity service)
+                           :fs.s3.awsSecretAccessKey (:credential service)
+                           :fs.s3n.awsAccessKeyId (:identity service)
+                           :fs.s3n.awsSecretAccessKey (:credential service)})
+                        (default-settings)
+                        role-maps)
                        rules))
    _ (m-result (debugf "hadoop settings in %s" settings))
    _ (m-result
@@ -582,3 +582,7 @@ already running."
           (hadoop-service
            service-name
            (merge {:description service-description} opts)))}))
+
+(defmulti hadoop-role-ports
+  "Returns ports used by the specified role"
+  (fn [role] role))

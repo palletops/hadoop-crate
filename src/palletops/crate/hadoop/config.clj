@@ -3,7 +3,7 @@
 
 (ns palletops.crate.hadoop.config
   (:use
-   [clojure.tools.logging :only [errorf]]
+   [clojure.tools.logging :only [debugf errorf]]
    [clojure.string :only [join]]
    [pallet.crate
     :only [defplan def-plan-fn assoc-settings get-settings defmethod-plan
@@ -45,6 +45,8 @@
   [property]
   (let [n (name property)]
     (cond
+     (re-matches #"[^.]+\.class" n) :metrics
+     (re-matches #"[^.]+\.period" n) :metrics
      (.startsWith n "mapred.") :mapred-site
      (.startsWith n "tasktracker.") :mapred-site
      (.startsWith n "dfs.") :hdfs-site
@@ -53,7 +55,7 @@
      (.startsWith n "hadoop.") :core-site
      (.startsWith n "pallet.") nil
      (.startsWith n "kernel.") nil
-     :else (errorf "Failed to classify property %s" property))))
+     :else (debugf "Failed to classify property %s" property))))
 
 (defn config-for
   "Returns the settings for a specific hadoop component

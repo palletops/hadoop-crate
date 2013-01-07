@@ -14,7 +14,7 @@
    palletops.crate.hadoop
    clojure.test))
 
-(def nn {:roles #{:name-node :job-tracker} :node (make-node "n")})
+(def nn {:roles #{:namenode :jobtracker} :node (make-node "n")})
 
 (deftest hadoop-settings-test
   (is
@@ -26,6 +26,13 @@
    (build-actions {:service-state [nn]}
      (hadoop-settings {})
      (hadoop-exec "ls"))))
+
+(deftest hadoop-jar-test
+  (is
+   (build-actions {:service-state [nn]}
+     (hadoop-settings {})
+     (hadoop-jar
+      {:jar {:remote-file "lf"} :input "ls" :args ["some" 1 :else]}))))
 
 (deftest hadoop-service-test
   (testing "default action"

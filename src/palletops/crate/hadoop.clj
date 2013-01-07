@@ -80,7 +80,8 @@
 
 (alias-ns 'palletops.crate.hadoop.base
           :only '[hadoop-server-spec hadoop-exec hadoop-rmdir hadoop-mkdir
-                  hadoop-settings hadoop-service install-hadoop])
+                  hadoop-settings hadoop-service install-hadoop
+                  hadoop-role-ports])
 
 ;;; # Cluster Support
 (def-plan-fn namenode-node
@@ -157,11 +158,12 @@
     (on-one-node
      [:jobtracker]
      (apply-map remote-file filename jar)
-     (hadoop-exec
+     (apply
+      hadoop-exec
       "jar" filename main
       (if input (single-quote input) "")
       (if output (single-quote output) "")
-      ~@args))))
+      args))))
 
 (def-plan-fn s3distcp-url
   "The s3distcp url"
