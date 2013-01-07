@@ -265,7 +265,7 @@ kernel.* Properties
     :as settings}]
   [role-maps (role-maps)
    service compute-service
-   service (m-result (service-properties service))
+   service (m-result (when service (service-properties service)))
    _ (m-result (debugf "service is %s" service))
    settings (m-result (base-settings
                        settings
