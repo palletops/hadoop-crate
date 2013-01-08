@@ -27,6 +27,14 @@
      (hadoop-settings {})
      (hadoop-exec "ls"))))
 
+(deftest hadoop-config-file-test
+  (is
+   (build-actions {:service-state [nn]}
+     (palletops.crate.hadoop.base/hadoop-config-file
+      {:owner "fred" :group "fred" :config-dir "/etc/hadoop"}
+      "core-site.xml"
+      {:content "some content"}))))
+
 (deftest hadoop-jar-test
   (is
    (build-actions {:service-state [nn]}

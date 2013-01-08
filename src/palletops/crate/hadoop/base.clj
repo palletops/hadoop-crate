@@ -26,6 +26,7 @@
    [pallet.crate.etc-hosts :only [hosts hosts-for-role] :as etc-hosts]
    [pallet.crate.java :only [java-home]]
    [pallet.map-merge :only [merge-key merge-keys]]
+   [pallet.monad :only [chain-s]]
    [pallet.monad.state-monad :only [m-map]]
    [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
@@ -387,13 +388,14 @@ map entry."
    [:pid-dir :log-dir :config-dir])
   (symbolic-link config-dir etc-config-dir))
 
-(def-plan-fn hadoop-config-file
+(defn hadoop-config-file
   "Helper to write config files"
   [{:keys [owner group config-dir] :as settings} filename file-source]
-  (apply
-   remote-file (str config-dir "/" filename)
-   :owner owner :group group
-   (apply concat file-source)))
+  (chain-s
+   (apply
+    remote-file (str config-dir "/" filename)
+    :owner owner :group group
+    (apply concat file-source))))
 
 (def-plan-fn settings-config-file
   "Write an XML config file based on settings."
