@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.1.3
+
+- Modify hadoop-config-file to not log arguments
+
 ## 0.1.2
 
 - Reduce potentially sensitive logs to trace
