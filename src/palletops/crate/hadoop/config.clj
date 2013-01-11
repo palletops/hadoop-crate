@@ -1,4 +1,4 @@
-;;; Copyright 2012 Hugo Duncan.
+;;; Copyright 2012, 2013 Hugo Duncan.
 ;;; All rights reserved.
 
 (ns palletops.crate.hadoop.config
@@ -6,7 +6,7 @@
    [clojure.tools.logging :only [debugf errorf]]
    [clojure.string :only [join]]
    [pallet.crate
-    :only [defplan def-plan-fn assoc-settings get-settings defmethod-plan
+    :only [assoc-settings get-settings defmethod-plan
            nodes-with-role target-node target]]
    [palletops.crate.hadoop.rules :only [defrules config]]
    [pallet.node :only [primary-ip hardware]]

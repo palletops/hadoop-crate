@@ -6,7 +6,7 @@
    [pallet.algo.fsmop :only [complete?]]
    [pallet.api :only [lift plan-fn group-spec server-spec]]
    [pallet.build-actions :only [build-actions]]
-   [pallet.crate :only [def-plan-fn get-settings]]
+   [pallet.crate :only [defplan get-settings]]
    [pallet.crate.automated-admin-user :only [automated-admin-user]]
    [pallet.crate.java :only [java-settings install-java]]
    [pallet.live-test :only [images test-nodes]]
@@ -98,41 +98,41 @@
 (def book-dir "/tmp/books")
 (def book-output-dir "/tmp/book-output")
 
-(def-plan-fn download-books
+(defplan download-books
   []
-  [{:keys [owner group] :as settings} (get-settings :hadoop {})]
-  (directory book-dir :owner owner :group group :mode "0755")
-  (map
-   #(remote-file
-    (str book-dir "/" %)
-    :url (str "https://hadoopbooks.s3.amazonaws.com/" %)
-    :owner owner :group group :mode "0755")
-   book-examples))
+  (let [{:keys [owner group] :as settings} (get-settings :hadoop {})]
+    (directory book-dir :owner owner :group group :mode "0755")
+    (map
+     #(remote-file
+       (str book-dir "/" %)
+       :url (str "https://hadoopbooks.s3.amazonaws.com/" %)
+       :owner owner :group group :mode "0755")
+     book-examples)))
 
-(def-plan-fn import-books-to-hdfs
+(defplan import-books-to-hdfs
   []
   (hadoop-exec "dfs" "-rmr" "books/")
   (hadoop-exec "dfs" "-copyFromLocal" book-dir "books/"))
 
-(def-plan-fn run-books
+(defplan run-books
   []
-  [{:keys [home] :as settings} (get-settings :hadoop {})]
-  (hadoop-exec "dfs" "-rmr" "books-output/")
-  (with-action-options {:script-dir home}
-    (hadoop-exec "jar" "hadoop-examples-*.jar" "wordcount"
-                 "books/" "books-output/")))
+  (let [{:keys [home] :as settings} (get-settings :hadoop {})]
+    (hadoop-exec "dfs" "-rmr" "books-output/")
+    (with-action-options {:script-dir home}
+      (hadoop-exec "jar" "hadoop-examples-*.jar" "wordcount"
+                   "books/" "books-output/"))))
 
-(def-plan-fn get-books-output
+(defplan get-books-output
   []
-  [{:keys [owner group] :as settings} (get-settings :hadoop {})]
-  (directory book-output-dir :owner owner :group group :mode "0755")
-  (hadoop-exec "dfs" "-getmerge" "books-output" book-output-dir)
-  [result (remote-file-content (str book-output-dir "/books-output"))])
+  (let [{:keys [owner group] :as settings} (get-settings :hadoop {})]
+    (directory book-output-dir :owner owner :group group :mode "0755")
+    (hadoop-exec "dfs" "-getmerge" "books-output" book-output-dir)
+    (remote-file-content (str book-output-dir "/books-output"))))
 
 (def java
   (server-spec
-   :phases {:settings (java-settings {:vendor :openjdk})
-            :install (install-java)}))
+   :phases {:settings (plan-fn (java-settings {:vendor :openjdk}))
+            :install (plan-fn (install-java))}))
 
 (deftest ^:live-test live-test
   (let [settings {}]

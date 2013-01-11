@@ -8,7 +8,7 @@
    [pallet.actions
     :only [directory exec-checked-script exec-script remote-directory
            remote-file symbolic-link user group assoc-settings update-settings
-           pipeline-when]
+           plan-when]
     :rename {user user-action group group-action
              assoc-settings assoc-settings-action
              update-settings update-settings-action}]
@@ -16,7 +16,7 @@
    [pallet.compute :only [service-properties]]
    [pallet.config-file.format :only [name-values]]
    [pallet.crate
-    :only [def-plan-fn assoc-settings update-settings
+    :only [defplan assoc-settings update-settings
            defmethod-plan get-settings
            get-node-settings group-name nodes-with-role target-id
            role->nodes-map target target-name
@@ -26,8 +26,6 @@
    [pallet.crate.etc-hosts :only [hosts hosts-for-role] :as etc-hosts]
    [pallet.crate.java :only [java-home]]
    [pallet.map-merge :only [merge-key merge-keys]]
-   [pallet.monad :only [chain-s]]
-   [pallet.monad.state-monad :only [m-map]]
    [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
    [pallet.stevedore :only [script]]
@@ -91,18 +89,17 @@
 (defmethod-version-plan
   install-settings {:os :linux}
   [os os-version version settings]
-  [target target]
-  (m-result
-   (cond
-    (:install-strategy settings) settings
-    (:remote-directory settings) (assoc settings
-                                   :install-strategy ::remote-directory)
-    (:dist settings) (install-dist (:dist settings) target settings)
+  (let [target (target)]
+    (cond
+     (:install-strategy settings) settings
+     (:remote-directory settings) (assoc settings
+                                    :install-strategy ::remote-directory)
+     (:dist settings) (install-dist (:dist settings) target settings)
 
-    :else (let [[url md5-url] (url settings)]
-            (assoc settings
-              :install-strategy ::remote-directory
-              :remote-directory {:url url :md5-url md5-url})))))
+     :else (let [[url md5-url] (url settings)]
+             (assoc settings
+               :install-strategy ::remote-directory
+               :remote-directory {:url url :md5-url md5-url})))))
 
 (defn env-var-merge
   [a b]
@@ -214,29 +211,28 @@
   (tracef "hadoop rules %s" (vec rules))
   (apply-productions (merge defaults initial) rules))
 
-(def-plan-fn role-maps
+(defplan role-maps
   "Provide maps from role to ips and to hostnames."
   []
-  [role->nodes (role->nodes-map)]
-  (m-result
-   {:ips (into {}
-               (map
-                (fn ips [[role nodes]]
-                  [role
-                   (vec (map #(or (private-ip (:node %))
-                                  (primary-ip (:node %)))
-                             nodes))])
-                role->nodes))
-    :hostnames (into {}
-                     (map
-                      (fn hostnames [[role nodes]]
-                        [role (vec (map #(hostname (:node %)) nodes))])
-                      role->nodes))}))
+  (let [role->nodes (role->nodes-map)]
+    {:ips (into {}
+                (map
+                 (fn ips [[role nodes]]
+                   [role
+                    (vec (map #(or (private-ip (:node %))
+                                   (primary-ip (:node %)))
+                              nodes))])
+                 role->nodes))
+     :hostnames (into {}
+                      (map
+                       (fn hostnames [[role nodes]]
+                         [role (vec (map #(hostname (:node %)) nodes))])
+                       role->nodes))}))
 
 ;;; hadoop-settings will infer information based on the distribution being
 ;;; installed, and set paths, and urls, etc. It does not infer other hadoop
 ;;; configuration.
-(def-plan-fn hadoop-settings
+(defplan hadoop-settings
   "Settings for the hadoop crate.
 
 `:dist`
@@ -264,47 +260,46 @@ kernel.* Properties
   [{:keys [user owner group dist dist-urls metrics instance-id rules]
     :or {rules @dist-rules}
     :as settings}]
-  [role-maps (role-maps)
-   service compute-service
-   service (m-result (when service (service-properties service)))
-   _ (m-result (tracef "service is %s" service))
-   settings (m-result (base-settings
-                       settings
-                       (deep-merge
-                        (when (= :aws-ec2 (:provider service))
-                          {:fs.s3.awsAccessKeyId (:identity service)
-                           :fs.s3.awsSecretAccessKey (:credential service)
-                           :fs.s3n.awsAccessKeyId (:identity service)
-                           :fs.s3n.awsSecretAccessKey (:credential service)})
-                        (default-settings)
-                        role-maps)
-                       rules))
-   _ (m-result (tracef "hadoop settings in %s" settings))
-   _ (m-result
-      (tracef "hadoop settings applied rules %s" (-> settings meta :rules vec)))
-   settings (install-settings (:version settings) settings)
+  (let [role-maps (role-maps)
+        service (compute-service)
+        service (when service (service-properties service))
+        _ (tracef "service is %s" service)
+        settings (base-settings
+                  settings
+                  (deep-merge
+                   (when (= :aws-ec2 (:provider service))
+                     {:fs.s3.awsAccessKeyId (:identity service)
+                      :fs.s3.awsSecretAccessKey (:credential service)
+                      :fs.s3n.awsAccessKeyId (:identity service)
+                      :fs.s3n.awsSecretAccessKey (:credential service)})
+                   (default-settings)
+                   role-maps)
+                  rules)
+        _ (tracef "hadoop settings in %s" settings)
+        _ (tracef "hadoop settings applied rules %s"
+                  (-> settings meta :rules vec))
+        settings (install-settings (:version settings) settings)
 
-   env-vars (m-result (properties->env-vars settings))
-   settings (m-result
-             (-> settings
-              ;; (merge install-config settings)
-                 ;; (update-in [:config] #(merge install-config %))
-                 ;; (update-in [:metrics] #(merge metrics-config %))
-                 (update-in
-                  [:env-vars]
-                  #(merge-with
-                    env-var-merge
-                    {:HADOOP_PID_DIR (:pid-dir settings)
-                     :HADOOP_LOG_DIR (:log-dir settings)
-                     :HADOOP_SSH_OPTS "-o StrictHostKeyChecking=no"
-                     :HADOOP_OPTS "-Djava.net.preferIPv4Stack=true"}
-                    %
-                    env-vars))))]
-  (m-result (tracef "hadoop settings out %s" settings))
-  (update-settings
-   :hadoop {:instance-id instance-id}
-   (partial merge-keys merge-settings-algorithm)
-   settings))
+        env-vars (properties->env-vars settings)
+        settings (-> settings
+                     ;; (merge install-config settings)
+                     ;; (update-in [:config] #(merge install-config %))
+                     ;; (update-in [:metrics] #(merge metrics-config %))
+                     (update-in
+                      [:env-vars]
+                      #(merge-with
+                        env-var-merge
+                        {:HADOOP_PID_DIR (:pid-dir settings)
+                         :HADOOP_LOG_DIR (:log-dir settings)
+                         :HADOOP_SSH_OPTS "-o StrictHostKeyChecking=no"
+                         :HADOOP_OPTS "-Djava.net.preferIPv4Stack=true"}
+                        %
+                        env-vars)))]
+    (tracef "hadoop settings out %s" settings)
+    (update-settings
+     :hadoop {:instance-id instance-id}
+     (partial merge-keys merge-settings-algorithm)
+     settings)))
 
 
    ;; install-config (install-config (:version settings) settings)
@@ -315,7 +310,7 @@ kernel.* Properties
 
 
 
-(def-plan-fn hadoop-env
+(defplan hadoop-env
   "Add into the hadoop env shell settings"
   [kv-pairs & {:keys [instance-id] :as options}]
   (update-settings :hadoop options update-in [:env-vars] merge kv-pairs))
@@ -323,32 +318,32 @@ kernel.* Properties
 ;;; # Install
 (defmethod-plan install ::remote-directory
   [facility instance-id]
-  [{:keys [owner group home url] :as settings}
-   (get-settings facility {:instance-id instance-id})]
-  (apply pallet.actions/remote-directory home
-         (apply concat (merge {:owner owner :group group}
-                              (:remote-directory settings)))))
+  (let [{:keys [owner group home url] :as settings}
+        (get-settings facility {:instance-id instance-id})]
+    (apply pallet.actions/remote-directory home
+           (apply concat (merge {:owner owner :group group}
+                                (:remote-directory settings))))))
 
-(def-plan-fn install-hadoop
+(defplan install-hadoop
   "Install hadoop."
   [& {:keys [instance-id]}]
   (install :hadoop instance-id))
 
 ;;; ## User
-(def-plan-fn hadoop-user
+(defplan hadoop-user
   "Create the hadoop user, setting java home and path"
   [{:keys [instance-id] :as options}]
-  [{:keys [user group home]}
-   (get-settings :hadoop {:instance-id instance-id})]
-  (group-action group :system true)
-  (user-action user :group group :system true :create-home true :shell :bash)
-  (remote-file (script (str (~user-home user) "/.bash_profile"))
-               :owner user
-               :group group
-               :literal true
-               :content (script
-                         (set! JAVA_HOME (~java-home))
-                         (set! PATH (str @PATH ":" ~home "/bin")))))
+  (let [{:keys [user group home]}
+        (get-settings :hadoop {:instance-id instance-id})]
+    (group-action group :system true)
+    (user-action user :group group :system true :create-home true :shell :bash)
+    (remote-file (script (str (~user-home user) "/.bash_profile"))
+                 :owner user
+                 :group group
+                 :literal true
+                 :content (script
+                           (set! JAVA_HOME (~java-home))
+                           (set! PATH (str @PATH ":" ~home "/bin"))))))
 
 ;;; # Property files
 
@@ -378,48 +373,47 @@ map entry."
 
 
 ;;; ## Write Files
-(def-plan-fn create-directories
+(defplan create-directories
   "Creates the appropriate directories based on settings"
   [{:keys [instance-id] :as options}]
-  [{:keys [owner group config-dir etc-config-dir] :as settings}
-   (get-settings :hadoop options)]
-  (map
-   #(directory (get settings %) :owner owner :group group :mode "0755")
-   [:pid-dir :log-dir :config-dir])
-  (symbolic-link config-dir etc-config-dir))
+  (let [{:keys [owner group config-dir etc-config-dir] :as settings}
+        (get-settings :hadoop options)]
+    (map
+     #(directory (get settings %) :owner owner :group group :mode "0755")
+     [:pid-dir :log-dir :config-dir])
+    (symbolic-link config-dir etc-config-dir)))
 
 (defn hadoop-config-file
   "Helper to write config files"
   [{:keys [owner group config-dir] :as settings} filename file-source]
-  (chain-s
-   (apply
-    remote-file (str config-dir "/" filename)
-    :owner owner :group group
-    (apply concat file-source))))
+  (apply
+   remote-file (str config-dir "/" filename)
+   :owner owner :group group
+   (apply concat file-source)))
 
-(def-plan-fn settings-config-file
+(defplan settings-config-file
   "Write an XML config file based on settings."
   [config-key {:keys [instance-id]}]
-  [{:keys [home user] :as settings}
-   (get-settings :hadoop {:instance-id instance-id})
-   config (m-result (config-for settings config-key))]
-  (hadoop-config-file
-   settings (str (name (or config-key "unspecified")) ".xml")
-   {:content (configuration-xml config)
-    :literal false}))
+  (let [{:keys [home user] :as settings}
+        (get-settings :hadoop {:instance-id instance-id})
+        config (config-for settings config-key)]
+    (hadoop-config-file
+     settings (str (name (or config-key "unspecified")) ".xml")
+     {:content (configuration-xml config)
+      :literal false})))
 
 (def properties-file
   {:metrics "hadoop-metrics.properties"})
 
-(def-plan-fn properties-config-file
+(defplan properties-config-file
   "Write an properties config file based on settings."
   [config-key {:keys [instance-id]}]
-  [{:keys [home user] :as settings}
-   (get-settings :hadoop {:instance-id instance-id})]
-  (hadoop-config-file
-   settings (properties-file config-key)
-   {:content (name-values (get settings config-key) :separator "=")
-    :literal false}))
+  (let [{:keys [home user] :as settings}
+        (get-settings :hadoop {:instance-id instance-id})]
+    (hadoop-config-file
+     settings (properties-file config-key)
+     {:content (name-values (get settings config-key) :separator "=")
+      :literal false})))
 
 (defn default-hadoop-env
   [{:keys [home log-dir pid-dir] :as settings}]
@@ -429,28 +423,29 @@ map entry."
    :HADOOP_OPTS  "-Djava.net.preferIPv4Stack=true"
    :JAVA_HOME (script (~java-home))})
 
-(def-plan-fn env-file
+(defplan env-file
   "Environment settings for the hadoop services"
   [{:keys [instance-id]}]
-  [{:keys [config-dir env-vars] :as settings}
-   (get-settings :hadoop {:instance-id instance-id})]
-  (apply-map
-   write-etc (str config-dir "/hadoop-env.sh")
-   (merge (default-hadoop-env settings) env-vars)))
+  (let [{:keys [config-dir env-vars] :as settings}
+        (get-settings :hadoop {:instance-id instance-id})]
+    (apply-map
+     write-etc (str config-dir "/hadoop-env.sh")
+     (merge (default-hadoop-env settings) env-vars))))
 
 ;;; # Hostnames
-(def-plan-fn set-hostname
+(defplan set-hostname
   "Set the hostname on a node"
   [node-name target-name]
   (etc-hosts/set-hostname node-name))
 
-(def-plan-fn setup-etc-hosts
+(defplan setup-etc-hosts
   "Adds the ip addresses and host names of all nodes in all the groups in
   `groups` to the `/etc/hosts` file in this node.
    :private-ip will use the private ip address of the nodes instead of the
        public one "
   [roles & {:keys [private-ip] :as options}]
-  (m-map #(hosts-for-role % :private-ip private-ip) roles)
+  (doseq [role roles]
+    (hosts-for-role role :private-ip private-ip))
   hosts)
 
 
@@ -465,87 +460,83 @@ map entry."
   [home args]
   (script ((str ~home "/bin/hadoop") ~@args)))
 
-(def-plan-fn hadoop-exec
+(defplan hadoop-exec
   "Calls the hadoop script with the specified arguments."
   {:arglists '[[options? & args]]}
   [& args]
-  [[args {:keys [instance-id]}] (m-result
-                                 (if (or (map? (first args))
-                                         (nil? (first args)))
-                                   [(rest args) (first args)]
-                                   [args]))
-   {:keys [home user] :as settings}
-   (get-settings :hadoop {:instance-id instance-id})]
-  (with-action-options {:sudo-user user}
-    (exec-checked-script
-     (str "hadoop " (join " " args))
-     ~(hadoop-env-script settings)
-     ~(hadoop-exec-script home args))))
+  (let [[args {:keys [instance-id]}] (if (or (map? (first args))
+                                             (nil? (first args)))
+                                       [(rest args) (first args)]
+                                       [args])
+        {:keys [home user] :as settings}
+        (get-settings :hadoop {:instance-id instance-id})]
+    (with-action-options {:sudo-user user}
+      (exec-checked-script
+       (str "hadoop " (join " " args))
+       ~(hadoop-env-script settings)
+       ~(hadoop-exec-script home args)))))
 
-(def-plan-fn hadoop-mkdir
+(defplan hadoop-mkdir
   "Make the specifed path in the hadoop filesystem."
   {:arglists '[[options? path]]}
   [& args]
-  [[[path] {:keys [instance-id]}] (m-result
-                                 (if (or (map? (first args))
-                                         (nil? (first args)))
-                                   [(rest args) (first args)]
-                                   [args]))
-   {:keys [home user] :as settings}
-   (get-settings :hadoop {:instance-id instance-id})]
-  (with-action-options {:sudo-user user}
-    (exec-checked-script
-     (str "hadoop-mkdir " (join " " args))
-     ~(hadoop-env-script settings)
-     (when (not ~(hadoop-exec-script home ["fs" "-test" "-d" path]))
-       ~(hadoop-exec-script home ["fs" "-mkdir" path])))))
+  (let [[[path] {:keys [instance-id]}] (if (or (map? (first args))
+                                               (nil? (first args)))
+                                         [(rest args) (first args)]
+                                         [args])
+        {:keys [home user] :as settings}
+        (get-settings :hadoop {:instance-id instance-id})]
+    (with-action-options {:sudo-user user}
+      (exec-checked-script
+       (str "hadoop-mkdir " (join " " args))
+       ~(hadoop-env-script settings)
+       (when (not ~(hadoop-exec-script home ["fs" "-test" "-d" path]))
+         ~(hadoop-exec-script home ["fs" "-mkdir" path]))))))
 
-(def-plan-fn hadoop-rmdir
+(defplan hadoop-rmdir
   "Remove the specifed path in the hadoop filesystem, if it exitst."
   {:arglists '[[options? path]]}
   [& args]
-  [[[path] {:keys [instance-id]}] (m-result
-                                 (if (or (map? (first args))
-                                         (nil? (first args)))
-                                   [(rest args) (first args)]
-                                   [args]))
-   {:keys [home user] :as settings}
-   (get-settings :hadoop {:instance-id instance-id})]
-  (with-action-options {:sudo-user user}
-    (exec-checked-script
-     (str "hadoop-rmdir " (join " " args))
-     ~(hadoop-env-script settings)
-     (when ~(hadoop-exec-script home ["dfs" "-test" "-d" path])
-       ~(hadoop-exec-script home ["dfs" "-rmr" path])))))
+  (let [[[path] {:keys [instance-id]}] (if (or (map? (first args))
+                                               (nil? (first args)))
+                                         [(rest args) (first args)]
+                                         [args])
+        {:keys [home user] :as settings}
+        (get-settings :hadoop {:instance-id instance-id})]
+    (with-action-options {:sudo-user user}
+      (exec-checked-script
+       (str "hadoop-rmdir " (join " " args))
+       ~(hadoop-env-script settings)
+       (when ~(hadoop-exec-script home ["dfs" "-test" "-d" path])
+         ~(hadoop-exec-script home ["dfs" "-rmr" path]))))))
 
 
 ;;; # Run hadoop daemons
-(def-plan-fn hadoop-service
+(defplan hadoop-service
   "Calls the hadoop-daemon script for the specified daemon, if it isn't
 already running."
   [daemon {:keys [action if-stopped description instance-id]
            :or {action :start}
            :as options}]
-  [{:keys [home user] :as settings}
-   (get-settings :hadoop {:instance-id instance-id})
-   if-stopped (m-result
-               (if (contains? options :if-stopped)
-                 if-stopped
-                 (= :start action)))]
-  (if if-stopped
-    (with-action-options {:sudo-user user}
-      (exec-checked-script
-       (str (name action) " hadoop daemon: "
-            (if description description daemon))
-       ~(hadoop-env-script settings)
-       (if-not (pipe (jps) (grep "-i" ~daemon))
-         ((str ~home "/bin/hadoop-daemon.sh") ~(name action) ~daemon))))
-    (with-action-options {:sudo-user user}
-      (exec-checked-script
-       (str (name action) " hadoop daemon: "
-            (if description description daemon))
-       ~(hadoop-env-script settings)
-       ((str ~home "/bin/hadoop-daemon.sh") ~(name action) ~daemon)))))
+  (let [{:keys [home user] :as settings}
+        (get-settings :hadoop {:instance-id instance-id})
+        if-stopped (if (contains? options :if-stopped)
+                     if-stopped
+                     (= :start action))]
+    (if if-stopped
+      (with-action-options {:sudo-user user}
+        (exec-checked-script
+         (str (name action) " hadoop daemon: "
+              (if description description daemon))
+         ~(hadoop-env-script settings)
+         (if-not (pipe (jps) (grep "-i" ~daemon))
+           ((str ~home "/bin/hadoop-daemon.sh") ~(name action) ~daemon))))
+      (with-action-options {:sudo-user user}
+        (exec-checked-script
+         (str (name action) " hadoop daemon: "
+              (if description description daemon))
+         ~(hadoop-env-script settings)
+         ((str ~home "/bin/hadoop-daemon.sh") ~(name action) ~daemon))))))
 
 (def config-file-for-role
   {:hdfs-node :hdfs-site
@@ -568,22 +559,22 @@ already running."
    :extends (vec (map #(% settings-fn opts) extends))
    :phases
    {:settings (plan-fn
-               [settings settings-fn]
-               (hadoop-settings settings))
+                (let [settings (settings-fn)]
+                  (hadoop-settings settings)))
     :install (plan-fn
-              (hadoop-user opts)
-              (create-directories opts)
-              (install-hadoop :instance-id instance-id))
+               (hadoop-user opts)
+               (create-directories opts)
+               (install-hadoop :instance-id instance-id))
     :configure (plan-fn
-                [config-kw (m-result (get config-file-for-role role))]
-                (pipeline-when config-kw
-                 (settings-config-file config-kw opts))
-                (properties-config-file :metrics opts)
-                (env-file opts))
+                 (let [config-kw (get config-file-for-role role)]
+                   (plan-when config-kw
+                     (settings-config-file config-kw opts))
+                   (properties-config-file :metrics opts)
+                   (env-file opts)))
     :run (plan-fn
-          (hadoop-service
-           service-name
-           (merge {:description service-description} opts)))}))
+           (hadoop-service
+            service-name
+            (merge {:description service-description} opts)))}))
 
 (defmulti hadoop-role-ports
   "Returns ports used by the specified role"
