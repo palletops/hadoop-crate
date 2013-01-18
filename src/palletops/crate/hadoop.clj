@@ -11,28 +11,26 @@
    [clojure.tools.logging :only [debugf]]
    [pallet.action :only [with-action-options]]
    [pallet.actions
-    :only [directory exec-checked-script exec-script remote-directory
-           remote-file symbolic-link user group assoc-settings update-settings
-           on-one-node]
+    :only [assoc-settings directory exec-checked-script exec-script group
+           on-one-node plan-when remote-directory remote-file symbolic-link
+           update-settings user]
     :rename {user user-action group group-action
              assoc-settings assoc-settings-action
              update-settings update-settings-action}]
    [pallet.api :only [plan-fn server-spec]]
    [pallet.argument :only [delayed]]
    [pallet.config-file.format :only [name-values]]
+   [pallet.compute :only [service-properties]]
    [pallet.crate
-    :only [defplan assoc-settings update-settings
-           defmethod-plan get-settings
-           get-node-settings group-name nodes-with-role target-id
-           target target-name]]
-   [pallet.crate.etc-default :only [write] :rename {write write-etc}]
-   [pallet.crate.etc-hosts :only [hosts hosts-for-role] :as etc-hosts]
-   [pallet.crate.java :only [java-home]]
+    :only [assoc-settings compute-service defmethod-plan defplan
+           get-node-settings get-settings group-name nodes-with-role target
+           target-id target-name update-settings]]
+   [pallet.crate.etc-hosts :only [hosts]]
    [pallet.crate.ssh-key :only [authorize-key generate-key public-key]]
    [pallet.crate-install :only [install]]
    [palletops.crate.hadoop.base
-    :only [env-file hadoop-env-script hadoop-role-spec
-           setup-etc-hosts settings-config-file]]
+    :only [env-file hadoop-env-script hadoop-role-spec settings-config-file
+           setup-etc-hosts]]
    [palletops.crate.hadoop.config :only [config-for final?]]
    [palletops.locos :only [apply-productions]]
    [pallet.map-merge :only [merge-key merge-keys]]
@@ -82,6 +80,19 @@
           :only '[hadoop-server-spec hadoop-exec hadoop-rmdir hadoop-mkdir
                   hadoop-settings hadoop-service install-hadoop
                   hadoop-role-ports])
+
+;;; # Use Hosts File or DNS
+(defmulti use-hosts-file
+  "Predicate to determine if host files should be written. Provides an open
+customisation point for use-hosts-file.  Provide additional multi-method
+implementations to modify behaviour."
+  (fn [] (:provider (service-properties (compute-service)))))
+
+(defmethod use-hosts-file :default []
+  false)
+
+(defmethod use-hosts-file :vmfest []
+  true)
 
 ;;; # Cluster Support
 (defplan namenode-node
@@ -217,6 +228,7 @@
                   [:mapred.system.dir]
                   [:log-dir]
                   [:pid-dir]])]
+      (assert dir "Missing directory property")
       (directory (str dir) :owner owner :group group :recursive false))))
 
 (defn hdfs-node
@@ -227,14 +239,17 @@
    :phases
    {:settings (plan-fn
                 (let [settings (settings-fn)]
-                  (hadoop-settings settings)))
+                  (hadoop-settings settings)
+                  (plan-when (use-hosts-file)
+                   (setup-etc-hosts
+                    [:hdfs-node :namenode :secondary-namenode :jobtracker
+                     :datanode :tasktracker]))))
     :install (plan-fn
                (local-dirs opts))
     :configure (plan-fn
                  "hdfs-node-configure"
-                 (setup-etc-hosts
-                  [:hdfs-node :namenode :secondary-namenode :jobtracker
-                   :datanode :tasktracker])
+                 (plan-when (use-hosts-file)
+                   (hosts))
                  (settings-config-file :hdfs-site opts)
                  (env-file opts))}))
 

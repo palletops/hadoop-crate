@@ -16,14 +16,13 @@
    [pallet.compute :only [service-properties]]
    [pallet.config-file.format :only [name-values]]
    [pallet.crate
-    :only [defplan assoc-settings update-settings
-           defmethod-plan get-settings
-           get-node-settings group-name nodes-with-role target-id
-           role->nodes-map target target-name
-           compute-service]]
+    :only [assoc-settings compute-service defmethod-plan defplan
+           get-node-settings get-settings group-name nodes-with-role
+           role->nodes-map target target-id target-name target-nodes
+           update-settings]]
    [pallet.crate-install :only [install]]
    [pallet.crate.etc-default :only [write] :rename {write write-etc}]
-   [pallet.crate.etc-hosts :only [hosts hosts-for-role] :as etc-hosts]
+   [pallet.crate.etc-hosts :only [hosts] :as etc-hosts]
    [pallet.crate.java :only [java-home]]
    [pallet.map-merge :only [merge-key merge-keys]]
    [pallet.node :only [primary-ip private-ip hostname]]
@@ -231,8 +230,9 @@
 
 ;;; hadoop-settings will infer information based on the distribution being
 ;;; installed, and set paths, and urls, etc. It does not infer other hadoop
-;;; configuration.
-(defplan hadoop-settings
+;;; configuration. Uses a plain function to prevent logging of args, which
+;;; may contain credentials.
+(defn hadoop-settings
   "Settings for the hadoop crate.
 
 `:dist`
@@ -441,13 +441,19 @@ map entry."
 (defplan setup-etc-hosts
   "Adds the ip addresses and host names of all nodes in all the groups in
   `groups` to the `/etc/hosts` file in this node.
-   :private-ip will use the private ip address of the nodes instead of the
-       public one "
-  [roles & {:keys [private-ip] :as options}]
-  (doseq [role roles]
-    (hosts-for-role role :private-ip private-ip))
-  hosts)
-
+   :private-ip?  can disable use of the private ip address of the node."
+  [roles & {:keys [private-ip?] :or {private-ip? true} :as options}]
+  (doseq [m [etc-hosts/localhost
+             (etc-hosts/localhost-hostname (target-name))
+             etc-hosts/ipv6-aliases]]
+    (etc-hosts/add-hosts m))
+  (doseq [role roles
+          node (nodes-with-role role)
+          :let [node (:node node)]]
+    (assert node)
+    (etc-hosts/add-hosts
+     {(or (and private-ip? (private-ip node)) (primary-ip node))
+      [(hostname node)]})))
 
 ;;; # Run hadoop
 (defn hadoop-env-script
