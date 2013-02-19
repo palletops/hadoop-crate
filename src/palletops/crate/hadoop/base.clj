@@ -27,7 +27,7 @@
    [pallet.map-merge :only [merge-key merge-keys]]
    [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
-   [pallet.stevedore :only [script]]
+   [pallet.stevedore :only [fragment script]]
    [pallet.utils :only [apply-map]]
    [pallet.version-dispatch
     :only [defmulti-version-plan defmethod-version-plan]]
@@ -47,9 +47,9 @@
                :mapr "http://package.mapr.com/releases/"}
    :namenode-role :namenode
    :data-dir "/tmp/namenode/data"
-   :pid-dir (script (str (~pid-root) "/hadoop"))
-   :log-dir (script (str (~log-root) "/hadoop"))
-   :etc-config-dir (script (str (~config-root) "/hadoop"))})
+   :pid-dir (fragment (str (~pid-root) "/hadoop"))
+   :log-dir (fragment (str (~log-root) "/hadoop"))
+   :etc-config-dir (fragment (str (~config-root) "/hadoop"))})
 
 (def ^{:doc "A sequence of all hadoop roles"}
   hadoop-roles
@@ -337,13 +337,14 @@ kernel.* Properties
         (get-settings :hadoop {:instance-id instance-id})]
     (group-action group :system true)
     (user-action user :group group :system true :create-home true :shell :bash)
-    (remote-file (script (str (~user-home user) "/.bash_profile"))
-                 :owner user
-                 :group group
-                 :literal true
-                 :content (script
-                           (set! JAVA_HOME (~java-home))
-                           (set! PATH (str @PATH ":" ~home "/bin"))))))
+    (remote-file
+     (fragment (str (~user-home user) "/.bash_profile"))
+     :owner user
+     :group group
+     :literal true
+     :content (script
+               (set! JAVA_HOME (~java-home))
+               (set! PATH (str @PATH ":" ~home "/bin"))))))
 
 ;;; # Property files
 
@@ -421,7 +422,7 @@ map entry."
    :HADOOP_LOG_DIR log-dir
    :HADOOP_SSH_OPTS "-o StrictHostKeyChecking=no"
    :HADOOP_OPTS  "-Djava.net.preferIPv4Stack=true"
-   :JAVA_HOME (script (~java-home))})
+   :JAVA_HOME (fragment (~java-home))})
 
 (defplan env-file
   "Environment settings for the hadoop services"
@@ -444,7 +445,6 @@ map entry."
    :private-ip?  can disable use of the private ip address of the node."
   [roles & {:keys [private-ip?] :or {private-ip? true} :as options}]
   (doseq [m [etc-hosts/localhost
-             (etc-hosts/localhost-hostname (target-name))
              etc-hosts/ipv6-aliases]]
     (etc-hosts/add-hosts m))
   (doseq [role roles
@@ -535,7 +535,7 @@ already running."
          (str (name action) " hadoop daemon: "
               (if description description daemon))
          ~(hadoop-env-script settings)
-         (if-not (pipe (jps) (grep "-i" ~daemon))
+         (if-not (pipe ("jps") ("grep" "-i" ~daemon))
            ((str ~home "/bin/hadoop-daemon.sh") ~(name action) ~daemon))))
       (with-action-options {:sudo-user user}
         (exec-checked-script

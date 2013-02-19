@@ -11,7 +11,7 @@
    [clojure.tools.logging :only [debugf]]
    [pallet.action :only [with-action-options]]
    [pallet.actions
-    :only [assoc-settings directory exec-checked-script exec-script group
+    :only [assoc-settings directory exec-script group
            on-one-node plan-when remote-directory remote-file symbolic-link
            update-settings user]
     :rename {user user-action group group-action
@@ -202,7 +202,7 @@ implementations to modify behaviour."
        ~(hadoop-env-script settings)
        (if (or (not (file-exists? ~(str name-dir "/current/VERSION"))) ~force)
          (pipe
-          (echo "Y")                    ; confirmation
+          (println "Y")                    ; confirmation
           ((str ~home "/bin/hadoop") namenode -format)))
        pwd))))                          ; gratuitous command to suppress errors
 

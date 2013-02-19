@@ -44,44 +44,47 @@
 
 (deftest hadoop-service-test
   (testing "default action"
-    (is (= (first
-            (build-actions {:phase-context "hadoop-service"}
-              (exec-checked-script
-               (str "start hadoop daemon: namenode")
-               ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
-               (if-not (pipe (jps) (grep "-i" namenode))
-                 ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
-                  start namenode)))))
-           (first
-            (build-actions {:service-state [nn]}
-              (hadoop-settings {})
-              (hadoop-service "namenode" {}))))))
+    (is (script-no-comment=
+         (first
+          (build-actions {:phase-context "hadoop-service"}
+            (exec-checked-script
+             (str "start hadoop daemon: namenode")
+             ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
+             (if-not (pipe ("jps") ("grep" "-i" namenode))
+               ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
+                start namenode)))))
+         (first
+          (build-actions {:service-state [nn]}
+            (hadoop-settings {})
+            (hadoop-service "namenode" {}))))))
   (testing "if-stopped"
-    (is (= (first
-            (build-actions {:phase-context "hadoop-service"}
-              (exec-checked-script
-               (str "start hadoop daemon: n")
-               ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
-               ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
-                start namenode))))
-           (first
-            (build-actions {:service-state [nn]}
-              (hadoop-settings {})
-              (hadoop-service
-               "namenode"
-               {:description "n" :if-stopped false :action :start}))))))
+    (is (script-no-comment=
+         (first
+          (build-actions {:phase-context "hadoop-service"}
+            (exec-checked-script
+             (str "start hadoop daemon: n")
+             ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
+             ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
+              start namenode))))
+         (first
+          (build-actions {:service-state [nn]}
+            (hadoop-settings {})
+            (hadoop-service
+             "namenode"
+             {:description "n" :if-stopped false :action :start}))))))
   (testing ":stop"
-    (is (= (first
-            (build-actions {:phase-context "hadoop-service"}
-              (exec-checked-script
-               (str "stop hadoop daemon: namenode")
-               ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
-               ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
-                stop namenode))))
-           (first
-            (build-actions {:service-state [nn]}
-              (hadoop-settings {})
-              (hadoop-service "namenode" {:action :stop})))))))
+    (is (script-no-comment=
+         (first
+          (build-actions {:phase-context "hadoop-service"}
+            (exec-checked-script
+             (str "stop hadoop daemon: namenode")
+             ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
+             ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
+              stop namenode))))
+         (first
+          (build-actions {:service-state [nn]}
+            (hadoop-settings {})
+            (hadoop-service "namenode" {:action :stop})))))))
 
 (deftest install-hadoop-test
   (testing "install"
