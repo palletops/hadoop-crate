@@ -1,5 +1,11 @@
 # Release Notes
 
+## 0.1.4
+
+- Update for pallet-0.8.0-beta.8
+
+- Make use of /etc/hosts provider specific
+
 ## 0.1.3
 
 - Modify hadoop-config-file to not log arguments
