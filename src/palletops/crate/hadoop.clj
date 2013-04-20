@@ -1,4 +1,4 @@
-;;; Copyright 2012 Hugo Duncan.
+;;; Copyright 2012, 2013 Hugo Duncan.
 ;;; All rights reserved.
 
 ;;; TODO kernel and os limits
@@ -11,32 +11,29 @@
    [clojure.tools.logging :only [debugf]]
    [pallet.action :only [with-action-options]]
    [pallet.actions
-    :only [directory exec-checked-script exec-script remote-directory
-           remote-file symbolic-link user group assoc-settings update-settings
-           on-one-node]
+    :only [assoc-settings directory exec-script group
+           on-one-node plan-when remote-directory remote-file symbolic-link
+           update-settings user]
     :rename {user user-action group group-action
              assoc-settings assoc-settings-action
              update-settings update-settings-action}]
    [pallet.api :only [plan-fn server-spec]]
+   [pallet.argument :only [delayed]]
    [pallet.config-file.format :only [name-values]]
+   [pallet.compute :only [service-properties]]
    [pallet.crate
-    :only [def-plan-fn assoc-settings update-settings
-           defmethod-plan get-settings
-           get-node-settings group-name nodes-with-role target-id
-           target target-name]]
-   [pallet.crate.etc-default :only [write] :rename {write write-etc}]
-   [pallet.crate.etc-hosts :only [hosts hosts-for-role] :as etc-hosts]
-   [pallet.crate.java :only [java-home]]
+    :only [assoc-settings compute-service defmethod-plan defplan
+           get-node-settings get-settings group-name nodes-with-role target
+           target-id target-name update-settings]]
+   [pallet.crate.etc-hosts :only [hosts]]
    [pallet.crate.ssh-key :only [authorize-key generate-key public-key]]
    [pallet.crate-install :only [install]]
    [palletops.crate.hadoop.base
-    :only [env-file hadoop-env-script hadoop-role-spec
-           setup-etc-hosts settings-config-file]]
+    :only [env-file hadoop-env-script hadoop-role-spec settings-config-file
+           setup-etc-hosts]]
    [palletops.crate.hadoop.config :only [config-for final?]]
    [palletops.locos :only [apply-productions]]
    [pallet.map-merge :only [merge-key merge-keys]]
-   [pallet.monad.state-monad :only [m-map]]
-   [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
    [pallet.stevedore :only [script]]
    [pallet.utils :only [apply-map]]
@@ -83,57 +80,72 @@
                   hadoop-settings hadoop-service install-hadoop
                   hadoop-role-ports])
 
+;;; # Use Hosts File or DNS
+(defmulti use-hosts-file
+  "Predicate to determine if host files should be written. Provides an open
+customisation point for use-hosts-file.  Provide additional multi-method
+implementations to modify behaviour."
+  (fn [] (:provider (service-properties (compute-service)))))
+
+(defmethod use-hosts-file :default []
+  false)
+
+(defmethod use-hosts-file :vmfest []
+  true)
+
 ;;; # Cluster Support
-(def-plan-fn namenode-node
+(defplan namenode-node
   "Return the IP of the namenode."
   [{:keys [instance-id]}]
-  [[namenode] (nodes-with-role :namenode)]
-  (m-result (:node namenode)))
+  (let [[namenode] (nodes-with-role :namenode)]
+    (:node namenode)))
 
-(def-plan-fn job-tracker-node
+(defplan job-tracker-node
   "Return the IP of the jobtracker."
   [{:keys [instance-id]}]
-  [[jobtracker] (nodes-with-role :jobtracker)]
-  (m-result (:node jobtracker)))
+  (let [[jobtracker] (nodes-with-role :jobtracker)]
+    (:node jobtracker)))
 
 
 
 ;;; ## SSH Access
-(def-plan-fn install-ssh-key
+(defplan install-ssh-key
   "Ensure a public key for accessing the node is available in the node's
   settings."
   [{:keys [instance-id] :as options}]
-  [id target-id
-   group group-name
-   key-name (m-result (format "ph_%s_%s_key" group id))
-   {:keys [user] :as settings} (get-settings :hadoop options)]
-  (generate-key user :comment key-name))
+  (let [id (target-id)
+        group (group-name)
+        key-name (format "ph_%s_%s_key" group id)
+        {:keys [user] :as settings} (get-settings :hadoop options)]
+    (generate-key user :comment key-name)))
 
-(def-plan-fn ssh-key
+(defplan ssh-key
   "Make a public key for accessing the node is available in the node's
   settings."
   [{:keys [instance-id] :as options}]
-  [{:keys [user] :as settings} (get-settings :hadoop options)
-   key (public-key user)]
-  (assoc-settings-action :hadoop {:public-key @key} :instance-id instance-id))
+  (let [{:keys [user] :as settings} (get-settings :hadoop options)
+        key (public-key user)]
+    (assoc-settings-action
+     :hadoop (delayed [_] {:public-key @key}) :instance-id instance-id)))
 
-(def-plan-fn authorize-node
+(defplan authorize-node
   "Authorises a specific node for ssh access to the specified `user`."
   [node {:keys [instance-id] :as options}]
-  [{:keys [user public-key] :as s} (get-node-settings node :hadoop options)]
-  (authorize-key user public-key))
+  (let [{:keys [user public-key] :as s}
+        (get-node-settings node :hadoop options)]
+    (authorize-key user public-key)))
 
-(def-plan-fn authorize-role
+(defplan authorize-role
   "Authorises all nodes with the specified role to access the current node."
   [role {:keys [instance-id] :as options}]
-  [{:keys [user] :as settings} (get-settings :hadoop options)
-   nodes (nodes-with-role role)]
-  (m-map #(authorize-node % options) (map :node nodes)))
+  (let [{:keys [user] :as settings} (get-settings :hadoop options)
+        nodes (nodes-with-role role)]
+    (doseq [node (map :node nodes)] (authorize-node node options))))
 
 ;;; # Jobs
 (defn single-quote [s] (str "'" s "'"))
 
-(def-plan-fn hadoop-jar
+(defplan hadoop-jar
   "Runs a hadoop jar.
 
 `:jar`
@@ -152,70 +164,71 @@
 : Specifies additional arguments
 "
   [{:keys [jar input output main args]}]
-  [{:keys [home] :as settings} (get-settings :hadoop {})
-   filename (m-result (str (gensym "job") ".jar"))]
-  (with-action-options {:script-dir home}
-    (on-one-node
-     [:jobtracker]
-     (apply-map remote-file filename jar)
-     (apply
-      hadoop-exec
-      "jar" filename main
-      (if input (single-quote input) "")
-      (if output (single-quote output) "")
-      args))))
+  (let [{:keys [home] :as settings} (get-settings :hadoop {})
+        filename (str (gensym "job") ".jar")]
+    (with-action-options {:script-dir home}
+      (on-one-node
+       [:jobtracker]
+       (apply-map remote-file filename jar)
+       (apply
+        hadoop-exec
+        "jar" filename main
+        (if input (single-quote input) "")
+        (if output (single-quote output) "")
+        args)))))
 
-(def-plan-fn s3distcp-url
+(defplan s3distcp-url
   "The s3distcp url"
   [{:keys [region version] :or {version "1.latest"}}]
-  (m-result
-   (format
-    "https://%selasticmapreduce.s3.amazonaws.com/libs/s3distcp/%s/s3distcp.jar"
-    (if region (str region ".") "")
-    version)))
+  (format
+   "https://%selasticmapreduce.s3.amazonaws.com/libs/s3distcp/%s/s3distcp.jar"
+   (if region (str region ".") "")
+   version))
 
 
 ;;; # HDFS
-(def-plan-fn format-hdfs
+(defplan format-hdfs
   "Formats HDFS for the first time. If HDFS has already been formatted, does
   nothing. Unfortunately, hadoop returns non-zero if it has already been
   formatted, even if we tell it not to format, so it is difficult to check the
   exit code."
   [{:keys [force]} {:keys [instance-id]}]
-  [{:keys [home user] :as settings}
-   (get-settings :hadoop {:instance-id instance-id})
-   name-dir (m-result (get-in settings [:hdfs-site :dfs.name.dir]))]
-  (with-action-options {:sudo-user user}
-    (exec-script
-     ~(hadoop-env-script settings)
-     (if (or (not (file-exists? ~(str name-dir "/current/VERSION"))) ~force)
-       (pipe
-        (echo "Y") ; confirmation
-        ((str ~home "/bin/hadoop") namenode -format)))
-     pwd))) ; gratuitous command to suppress errors
+  (let [{:keys [home user] :as settings}
+        (get-settings :hadoop {:instance-id instance-id})
+        name-dir (get-in settings [:hdfs-site :dfs.name.dir])]
+    (with-action-options {:sudo-user user}
+      (exec-script
+       ~(hadoop-env-script settings)
+       (if (or (not (file-exists? ~(str name-dir "/current/VERSION"))) ~force)
+         (pipe
+          (println "Y")                    ; confirmation
+          ((str ~home "/bin/hadoop") namenode -format)))
+       pwd))))                          ; gratuitous command to suppress errors
 
-(def-plan-fn initialise-hdfs
+(defplan initialise-hdfs
   [{:keys [instance-id] :as opts}]
-  [{:keys [data-dir] :as settings}
-   (get-settings :hadoop {:instance-id instance-id})]
-  (hadoop-exec opts "dfsadmin" "-safemode" "wait")
-  (hadoop-mkdir opts data-dir)
-  (hadoop-exec opts "fs" "-chmod" "+w" data-dir))
+  (let [{:keys [data-dir] :as settings}
+        (get-settings :hadoop {:instance-id instance-id})]
+    (hadoop-exec opts "dfsadmin" "-safemode" "wait")
+    (hadoop-mkdir opts data-dir)
+    (hadoop-exec opts "fs" "-chmod" "+w" data-dir)))
 
 ;;; # server-specs
-(def-plan-fn local-dirs
+(defplan local-dirs
   "Create the local directories referred to by the settings."
   [{:keys [instance-id] :as opts}]
-  [{:keys [owner group] :as settings} (get-settings :hadoop opts)]
-  (m-map
-   #(directory (str %) :owner owner :group group :recursive false)
-   (map
-    #(get-in settings %)
-    [[:dfs.data.dir]
-     [:dfs.name.dir]
-     [:fs.checkpoint.dir]
-     [:mapred.local.dir]
-     [:mapred.system.dir]])))
+  (let [{:keys [owner group] :as settings} (get-settings :hadoop opts)]
+    (doseq [dir (map
+                 #(get-in settings %)
+                 [[:dfs.data.dir]
+                  [:dfs.name.dir]
+                  [:fs.checkpoint.dir]
+                  [:mapred.local.dir]
+                  [:mapred.system.dir]
+                  [:log-dir]
+                  [:pid-dir]])]
+      (assert dir "Missing directory property")
+      (directory (str dir) :owner owner :group group :recursive false))))
 
 (defn hdfs-node
   "A hdfs server-spec. Settings as for hadoop-settings."
@@ -224,17 +237,20 @@
    :roles #{:datanode}
    :phases
    {:settings (plan-fn
-               [settings settings-fn]
-               (hadoop-settings settings))
+                (let [settings (settings-fn)]
+                  (hadoop-settings settings)
+                  (plan-when (use-hosts-file)
+                   (setup-etc-hosts
+                    [:hdfs-node :namenode :secondary-namenode :jobtracker
+                     :datanode :tasktracker]))))
     :install (plan-fn
-              (local-dirs opts))
+               (local-dirs opts))
     :configure (plan-fn
-                "hdfs-node-configure"
-                (setup-etc-hosts
-                 [:hdfs-node :namenode :secondary-namenode :jobtracker
-                  :datanode :tasktracker])
-                (settings-config-file :hdfs-site opts)
-                (env-file opts))}))
+                 "hdfs-node-configure"
+                 (plan-when (use-hosts-file)
+                   (hosts))
+                 (settings-config-file :hdfs-site opts)
+                 (env-file opts))}))
 
 (defn enable-jobtracker-ssh-spec
   "Returns a server-spec that authorises the jobtracker for ssh."
@@ -265,9 +281,9 @@
   (server-spec
    :extends [(hadoop-role-spec
               settings opts :jobtracker "jobtracker" "Job Tracker")]
-   :phases {:install (install-ssh-key opts)
-            :configure (ssh-key opts)
-            :collect-ssh-keys (ssh-key opts)}))
+   :phases {:install (plan-fn (install-ssh-key opts))
+            :configure (plan-fn (ssh-key opts))
+            :collect-ssh-keys (plan-fn (ssh-key opts))}))
 
 ;; A data node server-spec. Settings as for hadoop-settings.
 (defmethod hadoop-server-spec :datanode

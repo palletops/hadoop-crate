@@ -1,18 +1,18 @@
 (ns palletops.crate.hadoop-test
-  (:use
-   [pallet.action :only [with-action-options]]
+  (:require
+   [pallet.action :refer [with-action-options]]
    [pallet.actions
-    :only [directory exec-checked-script remote-file remote-file-content]]
-   [pallet.algo.fsmop :only [complete?]]
-   [pallet.api :only [lift plan-fn group-spec server-spec]]
-   [pallet.build-actions :only [build-actions]]
-   [pallet.crate :only [def-plan-fn get-settings]]
-   [pallet.crate.automated-admin-user :only [automated-admin-user]]
-   [pallet.crate.java :only [java-settings install-java]]
-   [pallet.live-test :only [images test-nodes]]
-   [pallet.test-utils :only [make-node]]
-   palletops.crate.hadoop
-   clojure.test))
+    :refer [directory exec-checked-script remote-file remote-file-content]]
+   [pallet.algo.fsmop :refer [complete?]]
+   [pallet.api :refer [lift plan-fn group-spec] :as api]
+   [pallet.build-actions :refer [build-actions]]
+   [pallet.crate :refer [defplan get-settings]]
+   [pallet.crate.automated-admin-user :refer [automated-admin-user]]
+   [pallet.crate.java :as java]
+   [pallet.live-test :refer [images test-nodes]]
+   [pallet.test-utils :refer [make-node]]
+   [palletops.crate.hadoop :refer :all]
+   [clojure.test :refer :all]))
 
 (def nn {:roles #{:namenode :jobtracker} :node (make-node "n")})
 
@@ -44,44 +44,47 @@
 
 (deftest hadoop-service-test
   (testing "default action"
-    (is (= (first
-            (build-actions {:phase-context "hadoop-service"}
-              (exec-checked-script
-               (str "start hadoop daemon: namenode")
-               ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
-               (if-not (pipe (jps) (grep "-i" namenode))
-                 ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
-                  start namenode)))))
-           (first
-            (build-actions {:service-state [nn]}
-              (hadoop-settings {})
-              (hadoop-service "namenode" {}))))))
+    (is (script-no-comment=
+         (first
+          (build-actions {:phase-context "hadoop-service"}
+            (exec-checked-script
+             (str "start hadoop daemon: namenode")
+             ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
+             (if-not (pipe ("jps") ("grep" "-i" namenode))
+               ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
+                start namenode)))))
+         (first
+          (build-actions {:service-state [nn]}
+            (hadoop-settings {})
+            (hadoop-service "namenode" {}))))))
   (testing "if-stopped"
-    (is (= (first
-            (build-actions {:phase-context "hadoop-service"}
-              (exec-checked-script
-               (str "start hadoop daemon: n")
-               ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
-               ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
-                start namenode))))
-           (first
-            (build-actions {:service-state [nn]}
-              (hadoop-settings {})
-              (hadoop-service
-               "namenode"
-               {:description "n" :if-stopped false :action :start}))))))
+    (is (script-no-comment=
+         (first
+          (build-actions {:phase-context "hadoop-service"}
+            (exec-checked-script
+             (str "start hadoop daemon: n")
+             ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
+             ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
+              start namenode))))
+         (first
+          (build-actions {:service-state [nn]}
+            (hadoop-settings {})
+            (hadoop-service
+             "namenode"
+             {:description "n" :if-stopped false :action :start}))))))
   (testing ":stop"
-    (is (= (first
-            (build-actions {:phase-context "hadoop-service"}
-              (exec-checked-script
-               (str "stop hadoop daemon: namenode")
-               ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
-               ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
-                stop namenode))))
-           (first
-            (build-actions {:service-state [nn]}
-              (hadoop-settings {})
-              (hadoop-service "namenode" {:action :stop})))))))
+    (is (script-no-comment=
+         (first
+          (build-actions {:phase-context "hadoop-service"}
+            (exec-checked-script
+             (str "stop hadoop daemon: namenode")
+             ("export" "PATH=${PATH}:/usr/local/hadoop-0.20.2")
+             ((str "/usr/local/hadoop-0.20.2/bin/hadoop-daemon.sh")
+              stop namenode))))
+         (first
+          (build-actions {:service-state [nn]}
+            (hadoop-settings {})
+            (hadoop-service "namenode" {:action :stop})))))))
 
 (deftest install-hadoop-test
   (testing "install"
@@ -98,41 +101,41 @@
 (def book-dir "/tmp/books")
 (def book-output-dir "/tmp/book-output")
 
-(def-plan-fn download-books
+(defplan download-books
   []
-  [{:keys [owner group] :as settings} (get-settings :hadoop {})]
-  (directory book-dir :owner owner :group group :mode "0755")
-  (map
-   #(remote-file
-    (str book-dir "/" %)
-    :url (str "https://hadoopbooks.s3.amazonaws.com/" %)
-    :owner owner :group group :mode "0755")
-   book-examples))
+  (let [{:keys [owner group] :as settings} (get-settings :hadoop {})]
+    (directory book-dir :owner owner :group group :mode "0755")
+    (map
+     #(remote-file
+       (str book-dir "/" %)
+       :url (str "https://hadoopbooks.s3.amazonaws.com/" %)
+       :owner owner :group group :mode "0755")
+     book-examples)))
 
-(def-plan-fn import-books-to-hdfs
+(defplan import-books-to-hdfs
   []
   (hadoop-exec "dfs" "-rmr" "books/")
   (hadoop-exec "dfs" "-copyFromLocal" book-dir "books/"))
 
-(def-plan-fn run-books
+(defplan run-books
   []
-  [{:keys [home] :as settings} (get-settings :hadoop {})]
-  (hadoop-exec "dfs" "-rmr" "books-output/")
-  (with-action-options {:script-dir home}
-    (hadoop-exec "jar" "hadoop-examples-*.jar" "wordcount"
-                 "books/" "books-output/")))
+  (let [{:keys [home] :as settings} (get-settings :hadoop {})]
+    (hadoop-exec "dfs" "-rmr" "books-output/")
+    (with-action-options {:script-dir home}
+      (hadoop-exec "jar" "hadoop-examples-*.jar" "wordcount"
+                   "books/" "books-output/"))))
 
-(def-plan-fn get-books-output
+(defplan get-books-output
   []
-  [{:keys [owner group] :as settings} (get-settings :hadoop {})]
-  (directory book-output-dir :owner owner :group group :mode "0755")
-  (hadoop-exec "dfs" "-getmerge" "books-output" book-output-dir)
-  [result (remote-file-content (str book-output-dir "/books-output"))])
+  (let [{:keys [owner group] :as settings} (get-settings :hadoop {})]
+    (directory book-output-dir :owner owner :group group :mode "0755")
+    (hadoop-exec "dfs" "-getmerge" "books-output" book-output-dir)
+    (remote-file-content (str book-output-dir "/books-output"))))
 
 (def java
-  (server-spec
-   :phases {:settings (java-settings {:vendor :openjdk})
-            :install (install-java)}))
+  (api/server-spec
+   :phases {:settings (plan-fn (java/settings {:vendor :openjdk}))
+            :install (plan-fn (java/install))}))
 
 (deftest ^:live-test live-test
   (let [settings {}]

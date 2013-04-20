@@ -1,14 +1,15 @@
 (ns palletops.crate.hadoop.common
   "Common configuration across distributions"
-  (:use
-   [clojure.string :only [join]]
-   [pallet.script.lib :only [user-home]]
-   [pallet.stevedore :only [script]]
-   [palletops.crate.hadoop.base :only [dist-rules]]
-   [palletops.locos :only [defrules !_]]))
+  (:require
+   [clojure.string :refer [join]]
+   [pallet.script.lib :refer [user-home]]
+   [pallet.stevedore :refer [script with-source-line-comments]]
+   [palletops.crate.hadoop.base :refer [dist-rules]]
+   [palletops.locos :refer [!_ defrules]]))
 
 (defn user-file [user & components]
-  (let [home (script (~user-home ~user))]
+  (let [home (with-source-line-comments false
+               (script (~user-home ~user)))]
     (str home "/" (join "/" components))))
 
 (def default-metrics

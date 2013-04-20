@@ -12,7 +12,7 @@
              update-settings update-settings-action}]
    [pallet.api :only [plan-fn server-spec]]
    [pallet.crate
-    :only [def-plan-fn assoc-settings update-settings
+    :only [defplan assoc-settings update-settings
            defmethod-plan get-settings
            get-node-settings group-name nodes-with-role
            target target-id target target-name]]
@@ -96,25 +96,26 @@
                  (:roles target)))))
 
 ;;; # MapR plan functions
-(def-plan-fn configure-mapr-cluster
+(defplan configure-mapr-cluster
   [& {:keys [instance-id]}]
-  [{:keys [mapr-home user ips]}
-   (get-settings :hadoop {:instance-id instance-id})]
-  (exec-checked-script
-   "Configure the MapR cluster"
-   ((str "MAPR_HOME=" ~mapr-home) (str "MAPR_USER=" ~user)
-    (str ~mapr-home "/server/configure.sh")
-    -C ~(join "," (ips :mapr/cldb))
-    -Z ~(join "," (ips :mapr/zookeeper))
-    "--isvm")))
+  (let [{:keys [mapr-home user ips]}
+        (get-settings :hadoop {:instance-id instance-id})]
+    (exec-checked-script
+     "Configure the MapR cluster"
+     ((str "MAPR_HOME=" ~mapr-home) (str "MAPR_USER=" ~user)
+      (str ~mapr-home "/server/configure.sh")
+      -C ~(join "," (ips :mapr/cldb))
+      -Z ~(join "," (ips :mapr/zookeeper))
+      "--isvm"))))
 
-(def-plan-fn authorise-user
+(defplan authorise-user
   [& {:keys [instance-id]}]
-  [{:keys [mapr-home user]} (get-settings :hadoop {:instance-id instance-id})]
-  (exec-checked-script
-   "Authorise hadoop user on MapR cluster"
-   ((str ~mapr-home "/bin/maprcli")
-    acl edit -type cluster -user (str ~user ":fc"))))
+  (let [{:keys [mapr-home user]}
+        (get-settings :hadoop {:instance-id instance-id})]
+    (exec-checked-script
+     "Authorise hadoop user on MapR cluster"
+     ((str ~mapr-home "/bin/maprcli")
+      acl edit -type cluster -user (str ~user ":fc")))))
 
 ;;; MapR roles
 (defn mapr-role-spec []
