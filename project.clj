@@ -4,8 +4,8 @@
   :license {:name "All rights reserved"}
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [org.clojure/data.xml "0.0.6"]
-                 [org.cloudhoist/pallet "0.8.0-SNAPSHOT"]
-                 [org.cloudhoist/java "0.8.0-SNAPSHOT"]
+                 [com.palletops/pallet "0.8.0-beta.8"]
+                 [com.palletops/java-crate "0.8.0-beta.4"]
                  [palletops/locos "0.1.0"]
                  [pathetic "0.4.0"]]
   :test-selectors {:default (complement :live-test)
