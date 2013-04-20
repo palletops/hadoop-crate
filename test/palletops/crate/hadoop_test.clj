@@ -1,18 +1,18 @@
 (ns palletops.crate.hadoop-test
-  (:use
-   [pallet.action :only [with-action-options]]
+  (:require
+   [pallet.action :refer [with-action-options]]
    [pallet.actions
-    :only [directory exec-checked-script remote-file remote-file-content]]
-   [pallet.algo.fsmop :only [complete?]]
-   [pallet.api :only [lift plan-fn group-spec server-spec]]
-   [pallet.build-actions :only [build-actions]]
-   [pallet.crate :only [defplan get-settings]]
-   [pallet.crate.automated-admin-user :only [automated-admin-user]]
-   [pallet.crate.java :only [java-settings install-java]]
-   [pallet.live-test :only [images test-nodes]]
-   [pallet.test-utils :only [make-node]]
-   palletops.crate.hadoop
-   clojure.test))
+    :refer [directory exec-checked-script remote-file remote-file-content]]
+   [pallet.algo.fsmop :refer [complete?]]
+   [pallet.api :refer [lift plan-fn group-spec] :as api]
+   [pallet.build-actions :refer [build-actions]]
+   [pallet.crate :refer [defplan get-settings]]
+   [pallet.crate.automated-admin-user :refer [automated-admin-user]]
+   [pallet.crate.java :as java]
+   [pallet.live-test :refer [images test-nodes]]
+   [pallet.test-utils :refer [make-node]]
+   [palletops.crate.hadoop :refer :all]
+   [clojure.test :refer :all]))
 
 (def nn {:roles #{:namenode :jobtracker} :node (make-node "n")})
 
@@ -133,9 +133,9 @@
     (remote-file-content (str book-output-dir "/books-output"))))
 
 (def java
-  (server-spec
-   :phases {:settings (plan-fn (java-settings {:vendor :openjdk}))
-            :install (plan-fn (install-java))}))
+  (api/server-spec
+   :phases {:settings (plan-fn (java/settings {:vendor :openjdk}))
+            :install (plan-fn (java/install))}))
 
 (deftest ^:live-test live-test
   (let [settings {}]

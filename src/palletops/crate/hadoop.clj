@@ -34,7 +34,6 @@
    [palletops.crate.hadoop.config :only [config-for final?]]
    [palletops.locos :only [apply-productions]]
    [pallet.map-merge :only [merge-key merge-keys]]
-   [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
    [pallet.stevedore :only [script]]
    [pallet.utils :only [apply-map]]

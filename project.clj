@@ -10,7 +10,4 @@
                  [pathetic "0.4.0"]]
   :test-selectors {:default (complement :live-test)
                    :live-test :live-test
-                   :all (constantly true)}
-  :repositories
-  {"sonatype-snapshots" "https://oss.sonatype.org/content/repositories/snapshots"
-   "sonatype" "https://oss.sonatype.org/content/repositories/releases/"})
+                   :all (constantly true)})
