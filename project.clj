@@ -6,7 +6,7 @@
                  [org.clojure/data.xml "0.0.6"]
                  [com.palletops/pallet "0.8.0-beta.8"]
                  [com.palletops/java-crate "0.8.0-beta.4"]
-                 [palletops/locos "0.1.0"]
+                 [com.palletops/locos "0.1.1-SNAPSHOT"]
                  [pathetic "0.4.0"]]
   :test-selectors {:default (complement :live-test)
                    :live-test :live-test
