@@ -30,6 +30,6 @@ http://hadoop.apache.org/core/docs/r0.20.0/core-default.html
 
 ## License
 
-Copyright © 2012 Hugo Duncan
+Licensed under [EPL](http://www.eclipse.org/legal/epl-v10.1.1.html)
 
-All rights reserved.
+Copyright © 2012-2014 Hugo Duncan, Antoni Batchelli

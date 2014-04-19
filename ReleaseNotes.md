@@ -1,4 +1,14 @@
-# Release Notes
+## 0.1.5
+
+- Setup repo for releases with lein-pallet-release.
+
+- Remove release code in prep for lein-pallet-release.
+
+- Update to pallet 0.8.0-RC.9, vmfest 0.4.0-alpha.1 and locos 0.1.1.
+
+- Release as EPL (was All Rights Reserved).
+
+- Update to latest locos snapshot
 
 ## 0.1.4
 
