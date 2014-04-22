@@ -239,7 +239,7 @@ implementations to modify behaviour."
    {:settings (plan-fn
                 (let [settings (settings-fn)]
                   (hadoop-settings settings)
-                  (plan-when (use-hosts-file)
+                  (when (use-hosts-file)
                    (setup-etc-hosts
                     [:hdfs-node :namenode :secondary-namenode :jobtracker
                      :datanode :tasktracker]))))
@@ -247,7 +247,7 @@ implementations to modify behaviour."
                (local-dirs opts))
     :configure (plan-fn
                  "hdfs-node-configure"
-                 (plan-when (use-hosts-file)
+                 (when (use-hosts-file)
                    (hosts))
                  (settings-config-file :hdfs-site opts)
                  (env-file opts))}))
