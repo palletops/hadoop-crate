@@ -8,7 +8,7 @@
   (:use
    [clojure.data.xml :only [element indent-str]]
    [clojure.string :only [join upper-case] :as string]
-   [clojure.tools.logging :only [debugf]]
+   [clojure.tools.logging :only [debugf] :as logging]
    [pallet.action :only [with-action-options]]
    [pallet.actions
     :only [assoc-settings directory exec-script group
@@ -28,6 +28,7 @@
    [pallet.crate.etc-hosts :only [hosts]]
    [pallet.crate.ssh-key :only [authorize-key generate-key public-key]]
    [pallet.crate-install :only [install]]
+   [pallet.node :only [running? terminated?]]
    [palletops.crate.hadoop.base
     :only [env-file hadoop-env-script hadoop-role-spec settings-config-file
            setup-etc-hosts]]
@@ -87,23 +88,28 @@ customisation point for use-hosts-file.  Provide additional multi-method
 implementations to modify behaviour."
   (fn [] (:provider (service-properties (compute-service)))))
 
-(defmethod use-hosts-file :default []
-  false)
+(defmethod use-hosts-file :default [] false)
 
-(defmethod use-hosts-file :vmfest []
-  true)
+(defmethod use-hosts-file :vmfest [] false)
 
 ;;; # Cluster Support
+
+(defplan running-nodes-with-role
+  "Returns the running nodes with a specific role"
+  [role]
+  (let [nodes (nodes-with-role role)]
+    (filter terminated? nodes)))
+
 (defplan namenode-node
   "Return the IP of the namenode."
   [{:keys [instance-id]}]
-  (let [[namenode] (nodes-with-role :namenode)]
+  (let [[namenode] (running-nodes-with-role :namenode)]
     (:node namenode)))
 
 (defplan job-tracker-node
   "Return the IP of the jobtracker."
   [{:keys [instance-id]}]
-  (let [[jobtracker] (nodes-with-role :jobtracker)]
+  (let [[jobtracker] (running-nodes-with-role :jobtracker)]
     (:node jobtracker)))
 
 
@@ -139,7 +145,7 @@ implementations to modify behaviour."
   "Authorises all nodes with the specified role to access the current node."
   [role {:keys [instance-id] :as options}]
   (let [{:keys [user] :as settings} (get-settings :hadoop options)
-        nodes (nodes-with-role role)]
+        nodes (running-nodes-with-role role)]
     (doseq [node (map :node nodes)] (authorize-node node options))))
 
 ;;; # Jobs
