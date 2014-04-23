@@ -62,6 +62,8 @@
   (let [[url md5-url] (url settings)]
     (assoc settings
       :install-strategy :palletops.crate.hadoop.base/remote-directory
-      :remote-directory {:url url
-                         ;; pallet doesn-t like :md5-url to be nil
-                         :md5-url (or md5-url "")})))
+      :remote-directory
+      (if md5-url
+        {:url url :md5-url md5-url }
+        ;; pallet doesn-t like :md5-url to be nil
+        {:url url}))))

@@ -1,3 +1,15 @@
+## 0.1.6
+
+- fix regression where deploying on vmfest would not create /etc/hosts
+
+- Update .gitignore to remove generated files.
+
+- Filter out terminated nodes, it breaks things in AWS.
+
+- Fix checks on whether to write and use /etc/hosts
+
+- Prevent installs fail when no md5 is available.
+
 ## 0.1.5
 
 - Setup repo for releases with lein-pallet-release.
