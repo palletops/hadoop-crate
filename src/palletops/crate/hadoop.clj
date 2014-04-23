@@ -90,7 +90,7 @@ implementations to modify behaviour."
 
 (defmethod use-hosts-file :default [] false)
 
-(defmethod use-hosts-file :vmfest [] false)
+(defmethod use-hosts-file :vmfest [] true)
 
 ;;; # Cluster Support
 
