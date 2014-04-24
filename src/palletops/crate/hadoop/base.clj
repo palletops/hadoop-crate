@@ -342,7 +342,7 @@ kernel.* Properties
     (group-action group :system true)
     (user-action user :group group :system true :create-home true :shell :bash)
     (remote-file
-     (fragment (str (~user-home user) "/.bash_profile"))
+     (fragment (str ~home "/.bash_profile"))
      :owner user
      :group group
      :literal true
