@@ -28,7 +28,7 @@
    [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
    [pallet.stevedore :only [fragment script]]
-   [pallet.utils :only [apply-map]]
+   [pallet.utils :only [apply-map maybe-assoc]]
    [pallet.version-dispatch
     :only [defmulti-version-plan defmethod-version-plan]]
    [pallet.versions :only [as-version-vector version-string]]
@@ -98,11 +98,7 @@
      :else (let [[url md5-url] (url settings)]
              (assoc settings
                :install-strategy ::remote-directory
-               :remote-directory
-               (if md5-url
-                 {:url url :md5-url md5-url}
-                 ;; pallet doesn't like :md5-url to be nil
-                 {:url url}))))))
+               :remote-directory (maybe-assoc {:url url} :md5-url md5-url))))))
 
 (defn env-var-merge
   [a b]

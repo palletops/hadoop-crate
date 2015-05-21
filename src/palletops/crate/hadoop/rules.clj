@@ -1,16 +1,17 @@
 (ns palletops.crate.hadoop.rules
   "Allow use of declarative rules for specifying configuration options"
   (:refer-clojure :exclude [==])
-  (:use
-   [clojure.core.logic
-    :only [all fresh membero prep project run* s# == >fd <fd]]))
+  (:require
+   [clojure.core.logic :refer [all fresh membero project run* s# ==]]
+   [clojure.core.logic.fd :as fd]
+   [clojure.core.logic.unifier :refer [prep]]))
 
 (def ^{:private true :doc "Translate to logic functions"}
   op-map
-  {`> >fd
-   `< <fd
-   '> >fd
-   '< <fd})
+  {`> fd/>
+   `< fd/<
+   '> fd/>
+   '< fd/<})
 
 (defn rule->logic-fns
   "Takes a rule, specified as a pattern, a production and zero or more guards,

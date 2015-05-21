@@ -1,11 +1,12 @@
 (ns palletops.crate.hadoop.cloudera
   "Cloudera specific support for the hadoop crate."
-  (:use
-   [clojure.string :only [join] :as string]
-   [pallet.versions :only [as-version-vector version-string]]
-   [palletops.crate.hadoop.base :only [dist-rules install-dist url]]
-   [palletops.locos :only [defrules apply-productions !_]]
-   [pathetic.core :only [render-path]]))
+  (:require
+   [clojure.string :refer [join] :as string]
+   [pallet.utils :refer [maybe-assoc]]
+   [pallet.versions :refer [as-version-vector version-string]]
+   [palletops.crate.hadoop.base :refer [dist-rules install-dist url]]
+   [palletops.locos :refer [defrules apply-productions !_]]
+   [pathetic.core :refer [render-path]]))
 
 (def cloudera-hadoop-version
   {"3.0" "0.20.2"
@@ -62,8 +63,4 @@
   (let [[url md5-url] (url settings)]
     (assoc settings
       :install-strategy :palletops.crate.hadoop.base/remote-directory
-      :remote-directory
-      (if md5-url
-        {:url url :md5-url md5-url }
-        ;; pallet doesn-t like :md5-url to be nil
-        {:url url}))))
+      :remote-directory (maybe-assoc {:url url} :md5-url md5-url))))
