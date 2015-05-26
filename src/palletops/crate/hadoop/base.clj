@@ -73,9 +73,10 @@
 (defmethod url :apache
   [{:keys [version dist-urls]}]
   (let [url (format
-             "%$1s/hadoop/core/hadoop-%$2s/hadoop-%$2s.tar.gz"
+             "%1$s/hadoop/core/hadoop-%2$s/hadoop-%2$s.tar.gz"
              (:apache dist-urls) version)]
-    [url (str url ".md5")]))
+    [url ;; (str url ".md5") TODO fix this - now uses mds file with various checksums
+     ]))
 
 ;;; At the moment we just have a single implementation of settings,
 ;;; but again, this is open-coded.
