@@ -169,19 +169,14 @@ implementations to modify behaviour."
 `:args`
 : Specifies additional arguments
 "
-  [{:keys [jar input output main args]}]
+  [{:keys [jar args]}]
   (let [{:keys [home] :as settings} (get-settings :hadoop {})
         filename (str (gensym "job") ".jar")]
     (with-action-options {:script-dir home}
       (on-one-node
        [:jobtracker]
        (apply-map remote-file filename jar)
-       (apply
-        hadoop-exec
-        "jar" filename main
-        (if input (single-quote input) "")
-        (if output (single-quote output) "")
-        args)))))
+       (apply hadoop-exec "jar" filename args)))))
 
 (defplan s3distcp-url
   "The s3distcp url"
