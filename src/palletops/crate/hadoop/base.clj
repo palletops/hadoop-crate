@@ -21,7 +21,7 @@
            role->nodes-map target target-id target-name target-nodes
            update-settings]]
    [pallet.crate-install :only [install]]
-   [pallet.crate.etc-default :only [write] :rename {write write-etc}]
+   [pallet.crate.etc-default :only [write-opts] :rename {write-opts write-etc}]
    [pallet.crate.etc-hosts :only [hosts] :as etc-hosts]
    [pallet.crate.java :only [java-home]]
    [pallet.map-merge :only [merge-key merge-keys]]
@@ -391,6 +391,7 @@ map entry."
   (apply
    remote-file (str config-dir "/" filename)
    :owner owner :group group
+   :overwrite-changes true ; hack for tarball install overwriting local config files
    (apply concat file-source)))
 
 (defplan settings-config-file
@@ -430,9 +431,9 @@ map entry."
   [{:keys [instance-id]}]
   (let [{:keys [config-dir env-vars] :as settings}
         (get-settings :hadoop {:instance-id instance-id})]
-    (apply-map
-     write-etc (str config-dir "/hadoop-env.sh")
-     (merge (default-hadoop-env settings) env-vars))))
+    (write-etc (str config-dir "/hadoop-env.sh")
+     (merge (default-hadoop-env settings) env-vars)
+     {:overwrite-changes true})))
 
 ;;; # Hostnames
 (defplan set-hostname
