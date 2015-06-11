@@ -1,3 +1,22 @@
+## 0.1.7
+
+- Update pallet and locos versions
+
+- Write config files with :overwrite-changes true
+  This is a workaround for the tarball install overwriting local 
+  configuration files.
+
+- Simplify hadoop-jar arguments
+  Remove the special cased :main, :input and :output fields.
+
+- Fix apache hadoop download url
+
+- Update to latest dependency versions
+
+- Fix #1 -- Create .bash_profile in ~hadoop.
+
+- Fix #1: .bash_profile being created in the wrong path
+
 ## 0.1.6
 
 - fix regression where deploying on vmfest would not create /etc/hosts
