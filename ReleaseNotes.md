@@ -1,3 +1,7 @@
+## 0.1.8
+
+- Make setup-etc-hosts more robust
+
 ## 0.1.7
 
 - Update pallet and locos versions
