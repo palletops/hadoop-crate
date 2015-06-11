@@ -450,12 +450,12 @@ map entry."
              etc-hosts/ipv6-aliases]]
     (etc-hosts/add-hosts m))
   (doseq [role roles
-          node (nodes-with-role role)
-          :let [node (:node node)]]
+          node (nodes-with-role role)]
     (assert node)
     (etc-hosts/add-hosts
      {(or (and private-ip? (private-ip node)) (primary-ip node))
-      [(hostname node)]})))
+      (let [n (hostname node)]
+        [n (first (string/split n #"\."))])})))
 
 ;;; # Run hadoop
 (defn hadoop-env-script
