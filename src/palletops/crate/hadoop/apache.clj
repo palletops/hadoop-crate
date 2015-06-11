@@ -1,10 +1,11 @@
 (ns palletops.crate.hadoop.apache
   "Apache specific support for the hadoop crate."
-  (:use
+  (:require
    [palletops.crate.hadoop.base
-    :only [dist-rules hadoop-role-ports install-dist url]]
-   [palletops.locos :only [defrules apply-productions !_]]
-   [pathetic.core :only [render-path]]))
+    :refer [dist-rules hadoop-role-ports install-dist url]]
+   [palletops.locos :refer [defrules apply-productions !_]]
+   [pallet.utils :refer [maybe-assoc]]
+   [pathetic.core :refer [render-path]]))
 
 (defrules apache-rules
   ^{:name :apache-version}
@@ -30,11 +31,7 @@
   (let [[url md5-url] (url settings)]
     (assoc settings
       :install-strategy :palletops.crate.hadoop.base/remote-directory
-      :remote-directory
-      (if md5-url
-        {:url url :md5-url md5-url}
-        ;; pallet doesn't like :md5-url to be nil
-        {:url url}))))
+      :remote-directory (maybe-assoc {:url url} :md5-url md5-url))))
 
 (defmethod hadoop-role-ports :namenode
   [role]

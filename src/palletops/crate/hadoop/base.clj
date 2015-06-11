@@ -21,14 +21,14 @@
            role->nodes-map target target-id target-name target-nodes
            update-settings]]
    [pallet.crate-install :only [install]]
-   [pallet.crate.etc-default :only [write] :rename {write write-etc}]
+   [pallet.crate.etc-default :only [write-opts] :rename {write-opts write-etc}]
    [pallet.crate.etc-hosts :only [hosts] :as etc-hosts]
    [pallet.crate.java :only [java-home]]
    [pallet.map-merge :only [merge-key merge-keys]]
    [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
    [pallet.stevedore :only [fragment script]]
-   [pallet.utils :only [apply-map]]
+   [pallet.utils :only [apply-map maybe-assoc]]
    [pallet.version-dispatch
     :only [defmulti-version-plan defmethod-version-plan]]
    [pallet.versions :only [as-version-vector version-string]]
@@ -73,9 +73,10 @@
 (defmethod url :apache
   [{:keys [version dist-urls]}]
   (let [url (format
-             "%$1s/hadoop/core/hadoop-%$2s/hadoop-%$2s.tar.gz"
+             "%1$s/hadoop/core/hadoop-%2$s/hadoop-%2$s.tar.gz"
              (:apache dist-urls) version)]
-    [url (str url ".md5")]))
+    [url ;; (str url ".md5") TODO fix this - now uses mds file with various checksums
+     ]))
 
 ;;; At the moment we just have a single implementation of settings,
 ;;; but again, this is open-coded.
@@ -98,11 +99,7 @@
      :else (let [[url md5-url] (url settings)]
              (assoc settings
                :install-strategy ::remote-directory
-               :remote-directory
-               (if md5-url
-                 {:url url :md5-url md5-url}
-                 ;; pallet doesn't like :md5-url to be nil
-                 {:url url}))))))
+               :remote-directory (maybe-assoc {:url url} :md5-url md5-url))))))
 
 (defn env-var-merge
   [a b]
@@ -342,7 +339,7 @@ kernel.* Properties
     (group-action group :system true)
     (user-action user :group group :system true :create-home true :shell :bash)
     (remote-file
-     (fragment (str (~user-home user) "/.bash_profile"))
+     (fragment (str (user-home ~user) "/.bash_profile"))
      :owner user
      :group group
      :literal true
@@ -394,6 +391,7 @@ map entry."
   (apply
    remote-file (str config-dir "/" filename)
    :owner owner :group group
+   :overwrite-changes true ; hack for tarball install overwriting local config files
    (apply concat file-source)))
 
 (defplan settings-config-file
@@ -433,9 +431,9 @@ map entry."
   [{:keys [instance-id]}]
   (let [{:keys [config-dir env-vars] :as settings}
         (get-settings :hadoop {:instance-id instance-id})]
-    (apply-map
-     write-etc (str config-dir "/hadoop-env.sh")
-     (merge (default-hadoop-env settings) env-vars))))
+    (write-etc (str config-dir "/hadoop-env.sh")
+     (merge (default-hadoop-env settings) env-vars)
+     {:overwrite-changes true})))
 
 ;;; # Hostnames
 (defplan set-hostname
