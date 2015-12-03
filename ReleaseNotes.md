@@ -1,3 +1,7 @@
+## 0.1.9
+
+- Add net rules to control intra-node ports
+
 ## 0.1.8
 
 - Make setup-etc-hosts more robust

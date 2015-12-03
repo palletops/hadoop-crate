@@ -45,7 +45,8 @@
    palletops.crate.hadoop.common
    palletops.crate.hadoop.apache
    palletops.crate.hadoop.cloudera
-   palletops.crate.hadoop.mapr))
+   palletops.crate.hadoop.mapr
+   [pallet.crate.net-rules :as net-rules]))
 
 
 ;;; this should go elsewhere
@@ -266,15 +267,20 @@ implementations to modify behaviour."
   (server-spec
    :extends [(hadoop-role-spec
               settings-fn opts :namenode "namenode" "Name Node" hdfs-node)]
-   :phases {:configure (plan-fn "format-hdfs" (format-hdfs {} opts))
+   :phases {:settings (plan-fn
+                       (net-rules/permit-role :datanode 8020 {}))
+            :configure (plan-fn "format-hdfs" (format-hdfs {} opts))
             :init (plan-fn (initialise-hdfs opts))}))
 
 ;; A secondary namenode server-spec. Settings as for hadoop-settings.
 (defmethod hadoop-server-spec :secondary-namenode
   [_ settings & {:keys [instance-id] :as opts}]
-  (hadoop-role-spec
-   settings opts
-   :secondary-namenode "secondary-namenode" "Secondary Name Node"))
+  (server-spec
+   :extends [(hadoop-role-spec
+              settings opts
+              :secondary-namenode "secondary-namenode" "Secondary Name Node")]
+   :phases {:settings (plan-fn
+                       (net-rules/permit-role :datanode 8020 {}))}))
 
 ;; Returns a job tracker server-spec. Settings as for hadoop-settings.
 (defmethod hadoop-server-spec :jobtracker
