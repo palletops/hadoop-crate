@@ -6,6 +6,8 @@
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/data.xml "0.0.6"]
                  [com.palletops/pallet "0.8.0"]
+                 [com.palletops/net-rules-crate "0.8.0-alpha.9"
+                  :exclusions [org.clojure/clojure]]
                  [com.palletops/java-crate "0.8.0-beta.6"]
                  [com.palletops/locos "0.1.3"]
                  [pathetic "0.5.1"]]

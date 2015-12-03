@@ -33,7 +33,9 @@
     :only [defmulti-version-plan defmethod-version-plan]]
    [pallet.versions :only [as-version-vector version-string]]
    [palletops.crate.hadoop.config :only [config-for final?]]
-   [palletops.locos :only [apply-productions deep-merge]]))
+   [palletops.locos :only [apply-productions deep-merge]])
+  (:require
+   [pallet.crate.net-rules :as net-rules]))
 
 ;;; # Settings
 (defn default-settings []
@@ -564,11 +566,13 @@ already running."
    service-description & extends]
   (server-spec
    :roles #{role}
-   :extends (vec (map #(% settings-fn opts) extends))
+   :extends (conj (mapv #(% settings-fn opts) extends)
+                  (net-rules/server-spec {}))
    :phases
    {:settings (plan-fn
-                (let [settings (settings-fn)]
-                  (hadoop-settings settings)))
+               (net-rules/permit-source "0.0.0.0/0" 22 {})
+               (let [settings (settings-fn)]
+                 (hadoop-settings settings)))
     :install (plan-fn
                (hadoop-user opts)
                (create-directories opts)
