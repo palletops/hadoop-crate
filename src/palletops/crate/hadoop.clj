@@ -288,15 +288,23 @@ implementations to modify behaviour."
   (server-spec
    :extends [(hadoop-role-spec
               settings opts :jobtracker "jobtracker" "Job Tracker")]
-   :phases {:install (plan-fn (install-ssh-key opts))
+   :phases {:settings (plan-fn
+                       (net-rules/permit-role :tasktracker 8021 {}))
+            :install (plan-fn (install-ssh-key opts))
             :configure (plan-fn (ssh-key opts))
             :collect-ssh-keys (plan-fn (ssh-key opts))}))
 
 ;; A data node server-spec. Settings as for hadoop-settings.
 (defmethod hadoop-server-spec :datanode
   [_ settings & {:keys [instance-id] :as opts}]
-  (hadoop-role-spec
-   settings opts :datanode "datanode" "Data Node" hdfs-node))
+  (server-spec
+   :extends [(hadoop-role-spec
+              settings opts :datanode "datanode" "Data Node" hdfs-node)]
+   :phases {:settings (plan-fn
+                       (net-rules/permit-role :namenode 50010 {})
+                       (net-rules/permit-role :namenode 50020 {})
+                       (net-rules/permit-role :secondary-namenode 50010 {})
+                       (net-rules/permit-role :secondary-namenode 50020 {}))}))
 
 ;; A task tracker server-spec. Settings as for hadoop-settings.
 (defmethod hadoop-server-spec :tasktracker
