@@ -1,3 +1,7 @@
+## 0.1.11
+
+- Allow jobtracker to access tasktracker
+
 ## 0.1.10
 
 - Fix net-rules for datanodes
