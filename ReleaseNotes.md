@@ -1,3 +1,8 @@
+## 0.1.10
+
+- Fix net-rules for datanodes
+  Opens up more of the required ports.
+
 ## 0.1.9
 
 - Add net rules to control intra-node ports
