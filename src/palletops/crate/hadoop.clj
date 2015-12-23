@@ -301,6 +301,8 @@ implementations to modify behaviour."
    :extends [(hadoop-role-spec
               settings opts :datanode "datanode" "Data Node" hdfs-node)]
    :phases {:settings (plan-fn
+                       (net-rules/permit-role :datanode 50010 {})
+                       (net-rules/permit-role :datanode 50020 {})
                        (net-rules/permit-role :namenode 50010 {})
                        (net-rules/permit-role :namenode 50020 {})
                        (net-rules/permit-role :secondary-namenode 50010 {})
