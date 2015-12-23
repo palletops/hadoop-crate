@@ -42,6 +42,7 @@
     :only [defmulti-version-plan defmethod-version-plan]]
    [pallet.versions :only [as-version-vector version-string]])
   (:require
+   [clojure.java.io :as io]
    palletops.crate.hadoop.common
    palletops.crate.hadoop.apache
    palletops.crate.hadoop.cloudera
@@ -172,7 +173,10 @@ implementations to modify behaviour."
 "
   [{:keys [jar args]}]
   (let [{:keys [home] :as settings} (get-settings :hadoop {})
-        filename (str (gensym "job") ".jar")]
+        filename (or (:local-file jar)
+                     (:remote-file jar)
+                     (str (gensym "job") ".jar"))
+        filename (.getName (io/file filename))]
     (with-action-options {:script-dir home}
       (on-one-node
        [:jobtracker]
