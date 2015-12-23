@@ -1,3 +1,11 @@
+## 0.1.12
+
+- Make jar file upload have a stable name
+  This ensures that when a jar is run many times, it is not uploaded each 
+  time if it has not changed.
+
+- Allow datanodes to access each other
+
 ## 0.1.11
 
 - Allow jobtracker to access tasktracker
