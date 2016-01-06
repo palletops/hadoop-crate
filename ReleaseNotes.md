@@ -1,3 +1,8 @@
+## 0.1.13
+
+- Create more of the required hadoop directories
+  Ensures the hadoop directories that are configured actually exist.
+
 ## 0.1.12
 
 - Make jar file upload have a stable name
