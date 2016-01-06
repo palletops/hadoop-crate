@@ -382,9 +382,12 @@ map entry."
   [{:keys [instance-id] :as options}]
   (let [{:keys [owner group config-dir etc-config-dir] :as settings}
         (get-settings :hadoop options)]
-    (map
-     #(directory (get settings %) :owner owner :group group :mode "0755")
-     [:pid-dir :log-dir :config-dir])
+    (doseq [k [:pid-dir :log-dir :config-dir
+               :hadoop.tmp.dir :mapred.local.dir :mapred.system.dir
+               :dfs.data.dir :dfs.name.dir]
+            :let [v (get settings k)]
+            :when v]
+      (directory v :owner owner :group group :mode "0755"))
     (symbolic-link config-dir etc-config-dir)))
 
 (defn hadoop-config-file
