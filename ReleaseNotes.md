@@ -1,3 +1,8 @@
+## 0.1.14
+
+- Allow task trackers to talk to each other
+  This seems to be necessary to allow the reducer to run.
+
 ## 0.1.13
 
 - Create more of the required hadoop directories
