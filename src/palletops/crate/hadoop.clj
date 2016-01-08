@@ -320,6 +320,8 @@ implementations to modify behaviour."
              (hadoop-role-spec
               settings opts :tasktracker "tasktracker" "Task Tracker")]
    :phases {:settings (plan-fn
+                       (net-rules/permit-role :tasktracker 50060 {})
+                       (net-rules/permit-role :jobtracker 50060 {})
                        (net-rules/permit-role :tasktracker 50075 {})
                        (net-rules/permit-role :namenode 50075 {})
                        (net-rules/permit-role :secondary-namenode 50075 {}))}))

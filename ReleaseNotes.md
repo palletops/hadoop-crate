@@ -1,3 +1,8 @@
+## 0.1.15
+
+- Open tasktracker web port between tasktrackers
+  Seems to be required for reduce to work.
+
 ## 0.1.14
 
 - Allow task trackers to talk to each other
