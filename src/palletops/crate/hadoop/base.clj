@@ -110,7 +110,7 @@
 (defmethod merge-key ::string-join
   [_ _ val-in-result val-in-latter]
   (merge-with
-   #(if (.contains %1 %2)
+   #(if (.contains (str %1) (str %2))
       %1
       (str %1 " " %2))
    val-in-result val-in-latter))
