@@ -1,3 +1,16 @@
+## 0.1.16
+
+- Refactor expressions to simplify
+
+- Allow passing of environment vars to hadoop-exec
+  To allow invocation specific environment variables, allow passing of a map
+  of values from Named items to values.  This changes the signature of 
+  hadoop-script-exec.
+
+- Allow string joins on non string property values
+  When passing numeric values for env vars, etc, make sure these handled 
+  correctly by turning them into strings.
+
 ## 0.1.15
 
 - Open tasktracker web port between tasktrackers
