@@ -110,7 +110,7 @@
 (defmethod merge-key ::string-join
   [_ _ val-in-result val-in-latter]
   (merge-with
-   #(if (.contains %1 %2)
+   #(if (.contains (str %1) (str %2))
       %1
       (str %1 " " %2))
    val-in-result val-in-latter))
@@ -470,14 +470,15 @@ map entry."
 
 (defn hadoop-exec-script
   "Returns script for the specified hadoop command"
-  [home args]
-  (script ((str ~home "/bin/hadoop") ~@args)))
+  [home args env]
+  (let [env-str (reduce #(str %1 " " (name (key %2)) "=" (val %2)) "" env)]
+    (script ("env" (quoted ~env-str) (str ~home "/bin/hadoop") ~@args))))
 
 (defplan hadoop-exec
   "Calls the hadoop script with the specified arguments."
   {:arglists '[[options? & args]]}
   [& args]
-  (let [[args {:keys [instance-id]}] (if (or (map? (first args))
+  (let [[args {:keys [env instance-id]}] (if (or (map? (first args))
                                              (nil? (first args)))
                                        [(rest args) (first args)]
                                        [args])
@@ -487,7 +488,7 @@ map entry."
       (exec-checked-script
        (str "hadoop " (join " " args))
        ~(hadoop-env-script settings)
-       ~(hadoop-exec-script home args)))))
+       ~(hadoop-exec-script home args env)))))
 
 (defplan hadoop-mkdir
   "Make the specifed path in the hadoop filesystem."
@@ -503,8 +504,8 @@ map entry."
       (exec-checked-script
        (str "hadoop-mkdir " (join " " args))
        ~(hadoop-env-script settings)
-       (when (not ~(hadoop-exec-script home ["fs" "-test" "-d" path]))
-         ~(hadoop-exec-script home ["fs" "-mkdir" path]))))))
+       (when (not ~(hadoop-exec-script home ["fs" "-test" "-d" path] nil))
+         ~(hadoop-exec-script home ["fs" "-mkdir" path] nil))))))
 
 (defplan hadoop-rmdir
   "Remove the specifed path in the hadoop filesystem, if it exitst."
@@ -520,8 +521,8 @@ map entry."
       (exec-checked-script
        (str "hadoop-rmdir " (join " " args))
        ~(hadoop-env-script settings)
-       (when ~(hadoop-exec-script home ["dfs" "-test" "-d" path])
-         ~(hadoop-exec-script home ["dfs" "-rmr" path]))))))
+       (when ~(hadoop-exec-script home ["dfs" "-test" "-d" path] nil)
+         ~(hadoop-exec-script home ["dfs" "-rmr" path] nil))))))
 
 
 ;;; # Run hadoop daemons
@@ -540,14 +541,14 @@ already running."
       (with-action-options {:sudo-user user}
         (exec-checked-script
          (str (name action) " hadoop daemon: "
-              (if description description daemon))
+              (or description daemon))
          ~(hadoop-env-script settings)
          (if-not (pipe ("jps") ("grep" "-i" ~daemon))
            ((str ~home "/bin/hadoop-daemon.sh") ~(name action) ~daemon))))
       (with-action-options {:sudo-user user}
         (exec-checked-script
          (str (name action) " hadoop daemon: "
-              (if description description daemon))
+              (or description daemon))
          ~(hadoop-env-script settings)
          ((str ~home "/bin/hadoop-daemon.sh") ~(name action) ~daemon))))))
 
