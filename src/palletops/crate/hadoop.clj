@@ -170,8 +170,11 @@ implementations to modify behaviour."
 
 `:args`
 : Specifies additional arguments
+
+`:env`
+: Specifies a map of environment variable values to set
 "
-  [{:keys [jar args]}]
+  [{:keys [jar args env]}]
   (let [{:keys [home] :as settings} (get-settings :hadoop {})
         filename (or (:local-file jar)
                      (:remote-file jar)
@@ -181,7 +184,7 @@ implementations to modify behaviour."
       (on-one-node
        [:jobtracker]
        (apply-map remote-file filename jar)
-       (apply hadoop-exec "jar" filename args)))))
+       (apply hadoop-exec {:env env} "jar" filename args)))))
 
 (defplan s3distcp-url
   "The s3distcp url"
