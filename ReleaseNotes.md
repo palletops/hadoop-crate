@@ -1,3 +1,7 @@
+## 0.1.17
+
+- Fix hadoop-exec-script when no emv passed
+
 ## 0.1.16
 
 - Refactor expressions to simplify

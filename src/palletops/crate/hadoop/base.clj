@@ -472,7 +472,9 @@ map entry."
   "Returns script for the specified hadoop command"
   [home args env]
   (let [env-str (reduce #(str %1 " " (name (key %2)) "=" (val %2)) "" env)]
-    (script ("env" (quoted ~env-str) (str ~home "/bin/hadoop") ~@args))))
+    (if (string/blank? env-str)
+      (script ((str ~home "/bin/hadoop") ~@args))
+      (script ("env" (quoted ~env-str) (str ~home "/bin/hadoop") ~@args)))))
 
 (defplan hadoop-exec
   "Calls the hadoop script with the specified arguments."
