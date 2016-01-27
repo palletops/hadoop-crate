@@ -1,3 +1,7 @@
+## 0.1.18
+
+- Fix quoting in hadoop-exec-script
+
 ## 0.1.17
 
 - Fix hadoop-exec-script when no emv passed
