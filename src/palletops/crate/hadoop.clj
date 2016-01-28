@@ -174,17 +174,22 @@ implementations to modify behaviour."
 `:env`
 : Specifies a map of environment variable values to set
 "
-  [{:keys [jar args env]}]
+  [{:keys [jar args env background logfile]}]
   (let [{:keys [home] :as settings} (get-settings :hadoop {})
         filename (or (:local-file jar)
                      (:remote-file jar)
                      (str (gensym "job") ".jar"))
-        filename (.getName (io/file filename))]
+        filename (.getName (io/file filename))
+        logfile (or logfile
+                    (if background
+                      (string/replace filename #".jar$" ".log")))]
     (with-action-options {:script-dir home}
       (on-one-node
        [:jobtracker]
        (apply-map remote-file filename jar)
-       (apply hadoop-exec {:env env} "jar" filename args)))))
+       (apply hadoop-exec
+              {:env env :background background :logfile logfile}
+              "jar" filename args)))))
 
 (defplan s3distcp-url
   "The s3distcp url"

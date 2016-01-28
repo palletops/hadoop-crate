@@ -1,3 +1,7 @@
+## 0.1.19
+
+- Enable running hadoop jars as background tasks
+
 ## 0.1.18
 
 - Fix quoting in hadoop-exec-script
