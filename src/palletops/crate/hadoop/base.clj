@@ -27,7 +27,7 @@
    [pallet.map-merge :only [merge-key merge-keys]]
    [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
-   [pallet.stevedore :only [fragment script]]
+   [pallet.stevedore :only [chained-script fragment script]]
    [pallet.utils :only [apply-map maybe-assoc]]
    [pallet.version-dispatch
     :only [defmulti-version-plan defmethod-version-plan]]
@@ -470,27 +470,44 @@ map entry."
 
 (defn hadoop-exec-script
   "Returns script for the specified hadoop command"
-  [home args env]
-  (let [envs (map #(str "\"" (name (key %)) "=" (val %) "\"") env)]
+  [home args env {:keys [background logfile]}]
+  (let [envs (map #(str "\"" (name (key %)) "=" (val %) "\"") env)
+        logfile (if logfile [">>" logfile])
+        nohup (if background ["nohup"])
+        background (if background ["&"])]
     (if (seq envs)
-      (script ("env" ~@envs (str ~home "/bin/hadoop") ~@args))
-      (script ((str ~home "/bin/hadoop") ~@args)))))
+      (chained-script
+       ("set" "+m")
+       ("("
+        (~@nohup "env" ~@envs
+         (str ~home "/bin/hadoop") ~@args ~@logfile ~@background)
+        ")")
+       ("sleep" 5))
+      (chained-script
+       ("set" "+m")
+       ("("
+        (~@nohup
+         (str ~home "/bin/hadoop") ~@args ~@logfile ~@background)
+        ")")
+       ("sleep" 5)))))
 
 (defplan hadoop-exec
   "Calls the hadoop script with the specified arguments."
   {:arglists '[[options? & args]]}
   [& args]
-  (let [[args {:keys [env instance-id]}] (if (or (map? (first args))
-                                             (nil? (first args)))
-                                       [(rest args) (first args)]
-                                       [args])
+  (let [[args {:keys [env instance-id background logfile] :as options}]
+        (if (or (map? (first args))
+                (nil? (first args)))
+          [(rest args) (first args)]
+          [args])
         {:keys [home user] :as settings}
         (get-settings :hadoop {:instance-id instance-id})]
     (with-action-options {:sudo-user user}
       (exec-checked-script
        (str "hadoop " (join " " args))
        ~(hadoop-env-script settings)
-       ~(hadoop-exec-script home args env)))))
+       ~(hadoop-exec-script
+         home args env (dissoc options :env :instance-id))))))
 
 (defplan hadoop-mkdir
   "Make the specifed path in the hadoop filesystem."
@@ -506,8 +523,8 @@ map entry."
       (exec-checked-script
        (str "hadoop-mkdir " (join " " args))
        ~(hadoop-env-script settings)
-       (when (not ~(hadoop-exec-script home ["fs" "-test" "-d" path] nil))
-         ~(hadoop-exec-script home ["fs" "-mkdir" path] nil))))))
+       (when (not ~(hadoop-exec-script home ["fs" "-test" "-d" path] nil nil))
+         ~(hadoop-exec-script home ["fs" "-mkdir" path] nil nil))))))
 
 (defplan hadoop-rmdir
   "Remove the specifed path in the hadoop filesystem, if it exitst."
@@ -523,8 +540,8 @@ map entry."
       (exec-checked-script
        (str "hadoop-rmdir " (join " " args))
        ~(hadoop-env-script settings)
-       (when ~(hadoop-exec-script home ["dfs" "-test" "-d" path] nil)
-         ~(hadoop-exec-script home ["dfs" "-rmr" path] nil))))))
+       (when ~(hadoop-exec-script home ["dfs" "-test" "-d" path] nil nil)
+         ~(hadoop-exec-script home ["dfs" "-rmr" path] nil nil))))))
 
 
 ;;; # Run hadoop daemons
