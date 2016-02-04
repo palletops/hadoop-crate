@@ -1,3 +1,8 @@
+## 0.1.20
+
+- Add service phases for hadoop services
+  Adds :start, :stop, and :restart phases for all hadoop daemons.
+
 ## 0.1.19
 
 - Enable running hadoop jars as background tasks
