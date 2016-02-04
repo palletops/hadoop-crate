@@ -27,7 +27,7 @@
    [pallet.map-merge :only [merge-key merge-keys]]
    [pallet.node :only [primary-ip private-ip hostname]]
    [pallet.script.lib :only [pid-root log-root config-root user-home]]
-   [pallet.stevedore :only [chained-script fragment script]]
+   [pallet.stevedore :only [chain-commands* chained-script fragment script]]
    [pallet.utils :only [apply-map maybe-assoc]]
    [pallet.version-dispatch
     :only [defmulti-version-plan defmethod-version-plan]]
@@ -555,7 +555,10 @@ already running."
         (get-settings :hadoop {:instance-id instance-id})
         if-stopped (if (contains? options :if-stopped)
                      if-stopped
-                     (= :start action))]
+                     (= :start action))
+        actions (if (= action :restart)
+                  [:stop :start]
+                  [action])]
     (if if-stopped
       (with-action-options {:sudo-user user}
         (exec-checked-script
@@ -563,13 +566,21 @@ already running."
               (or description daemon))
          ~(hadoop-env-script settings)
          (if-not (pipe ("jps") ("grep" "-i" ~daemon))
-           ((str ~home "/bin/hadoop-daemon.sh") ~(name action) ~daemon))))
+           ~(chain-commands*
+             (for [action actions]
+               (fragment
+                ((str ~home "/bin/hadoop-daemon.sh")
+                 ~(name action) ~daemon)))))))
       (with-action-options {:sudo-user user}
         (exec-checked-script
          (str (name action) " hadoop daemon: "
               (or description daemon))
          ~(hadoop-env-script settings)
-         ((str ~home "/bin/hadoop-daemon.sh") ~(name action) ~daemon))))))
+         ~(chain-commands*
+           (for [action actions]
+             (fragment
+              ((str ~home "/bin/hadoop-daemon.sh")
+               ~(name action) ~daemon)))))))))
 
 (def config-file-for-role
   {:hdfs-node :hdfs-site
@@ -597,19 +608,35 @@ already running."
                (let [settings (settings-fn)]
                  (hadoop-settings settings)))
     :install (plan-fn
-               (hadoop-user opts)
-               (create-directories opts)
-               (install-hadoop :instance-id instance-id))
+              (hadoop-user opts)
+              (create-directories opts)
+              (install-hadoop :instance-id instance-id))
     :configure (plan-fn
-                 (let [config-kw (get config-file-for-role role)]
-                   (plan-when config-kw
-                     (settings-config-file config-kw opts))
-                   (properties-config-file :metrics opts)
-                   (env-file opts)))
+                (let [config-kw (get config-file-for-role role)]
+                  (plan-when config-kw
+                             (settings-config-file config-kw opts))
+                  (properties-config-file :metrics opts)
+                  (env-file opts)))
     :run (plan-fn
+          (hadoop-service
+           service-name
+           (merge {:description service-description} opts)))
+    :start (plan-fn
+            (hadoop-service
+             service-name
+             (merge {:description service-description} opts)))
+    :stop (plan-fn
            (hadoop-service
             service-name
-            (merge {:description service-description} opts)))}))
+            (merge {:description service-description}
+                   opts
+                   {:action :stop})))
+    :restart (plan-fn
+              (hadoop-service
+               service-name
+               (merge {:description service-description}
+                      opts
+                      {:action :restart})))}))
 
 (defmulti hadoop-role-ports
   "Returns ports used by the specified role"
