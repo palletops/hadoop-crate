@@ -1,4 +1,4 @@
-(defproject com.palletops/hadoop-crate "0.1.20"
+(defproject com.palletops/hadoop-crate "0.1.21"
   :description "Crate for hadoop installation"
   :url "http://github.com/palletops/hadoop-crate"
   :license {:name "Eclipse Public License"

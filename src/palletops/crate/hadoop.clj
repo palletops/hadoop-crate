@@ -209,7 +209,7 @@ implementations to modify behaviour."
   [{:keys [force]} {:keys [instance-id]}]
   (let [{:keys [home user] :as settings}
         (get-settings :hadoop {:instance-id instance-id})
-        name-dir (get-in settings [:hdfs-site :dfs.name.dir])]
+        name-dir (get-in settings [:dfs.name.dir])]
     (with-action-options {:sudo-user user}
       (exec-script
        ~(hadoop-env-script settings)
