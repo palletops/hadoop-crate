@@ -1,3 +1,7 @@
+## 0.1.21
+
+- Fix guard for hdfs format
+
 ## 0.1.20
 
 - Add service phases for hadoop services
