@@ -616,7 +616,13 @@ already running."
          :stop (plan-fn
                 (service service-name service-description opts :stop))
          :restart (plan-fn
-                   (service service-name service-description opts :restart))}]
+                   (service service-name service-description opts :restart))}
+        hadoop-config (plan-fn
+                       (let [config-kw (get config-file-for-role role)]
+                         (plan-when config-kw
+                                    (settings-config-file config-kw opts))
+                         (properties-config-file :metrics opts)
+                         (env-file opts)))]
     (server-spec
      :roles #{role}
      :extends (conj (mapv #(% settings-fn opts) extends)
@@ -631,12 +637,8 @@ already running."
                  (hadoop-user opts)
                  (create-directories opts)
                  (install-hadoop :instance-id instance-id))
-       :configure (plan-fn
-                   (let [config-kw (get config-file-for-role role)]
-                     (plan-when config-kw
-                                (settings-config-file config-kw opts))
-                     (properties-config-file :metrics opts)
-                     (env-file opts)))
+       :configure hadoop-config
+       :hadoop-configure hadoop-config
        :run (plan-fn
              (hadoop-service
               service-name
