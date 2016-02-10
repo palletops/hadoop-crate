@@ -1,3 +1,10 @@
+## 0.1.22
+
+- Add daemon specific service phases
+  Adds phases to allow control of individual hadoop services.
+
+      {namenode|jobtracker|tasktracker|datanode}-{start|stop|restart}
+
 ## 0.1.21
 
 - Fix guard for hdfs format

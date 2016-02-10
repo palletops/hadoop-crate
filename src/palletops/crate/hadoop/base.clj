@@ -582,6 +582,18 @@ already running."
               ((str ~home "/bin/hadoop-daemon.sh")
                ~(name action) ~daemon)))))))))
 
+
+(defplan service
+  [service-name service-description opts action]
+  {:pre [(string? service-name)
+         (string? service-description)
+         (keyword? action)]}
+  (hadoop-service
+   service-name
+   (merge {:description service-description}
+          opts
+          {:action action})))
+
 (def config-file-for-role
   {:hdfs-node :hdfs-site
    :namenode :core-site
@@ -598,45 +610,42 @@ already running."
   "Returns a server-spec implementing the specified Hadoop server."
   [settings-fn {:keys [instance-id] :as opts} role service-name
    service-description & extends]
-  (server-spec
-   :roles #{role}
-   :extends (conj (mapv #(% settings-fn opts) extends)
-                  (net-rules/server-spec {}))
-   :phases
-   {:settings (plan-fn
-               (net-rules/permit-source "0.0.0.0/0" 22 {})
-               (let [settings (settings-fn)]
-                 (hadoop-settings settings)))
-    :install (plan-fn
-              (hadoop-user opts)
-              (create-directories opts)
-              (install-hadoop :instance-id instance-id))
-    :configure (plan-fn
-                (let [config-kw (get config-file-for-role role)]
-                  (plan-when config-kw
-                             (settings-config-file config-kw opts))
-                  (properties-config-file :metrics opts)
-                  (env-file opts)))
-    :run (plan-fn
-          (hadoop-service
-           service-name
-           (merge {:description service-description} opts)))
-    :start (plan-fn
-            (hadoop-service
-             service-name
-             (merge {:description service-description} opts)))
-    :stop (plan-fn
-           (hadoop-service
-            service-name
-            (merge {:description service-description}
-                   opts
-                   {:action :stop})))
-    :restart (plan-fn
-              (hadoop-service
-               service-name
-               (merge {:description service-description}
-                      opts
-                      {:action :restart})))}))
+  (let [service-phases
+        {:start (plan-fn
+                 (service service-name service-description opts :start))
+         :stop (plan-fn
+                (service service-name service-description opts :stop))
+         :restart (plan-fn
+                   (service service-name service-description opts :restart))}]
+    (server-spec
+     :roles #{role}
+     :extends (conj (mapv #(% settings-fn opts) extends)
+                    (net-rules/server-spec {}))
+     :phases
+     (merge
+      {:settings (plan-fn
+                  (net-rules/permit-source "0.0.0.0/0" 22 {})
+                  (let [settings (settings-fn)]
+                    (hadoop-settings settings)))
+       :install (plan-fn
+                 (hadoop-user opts)
+                 (create-directories opts)
+                 (install-hadoop :instance-id instance-id))
+       :configure (plan-fn
+                   (let [config-kw (get config-file-for-role role)]
+                     (plan-when config-kw
+                                (settings-config-file config-kw opts))
+                     (properties-config-file :metrics opts)
+                     (env-file opts)))
+       :run (plan-fn
+             (hadoop-service
+              service-name
+              (merge {:description service-description} opts)))}
+      service-phases
+      (into {}
+            (map (fn [[k v]]
+                   (vector (keyword (str service-name "-" (name k))) v))
+                 service-phases))))))
 
 (defmulti hadoop-role-ports
   "Returns ports used by the specified role"
