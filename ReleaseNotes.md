@@ -1,3 +1,8 @@
+## 0.1.23
+
+- Add hadoop-configure phase to write hadoop config
+  The phase writes all hadoop configuration files.
+
 ## 0.1.22
 
 - Add daemon specific service phases
