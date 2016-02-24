@@ -213,7 +213,10 @@ implementations to modify behaviour."
     (with-action-options {:sudo-user user}
       (exec-script
        ~(hadoop-env-script settings)
-       (if (or (not (file-exists? ~(str name-dir "/current/VERSION"))) ~force)
+       (if (or (and (not (file-exists? ~(str name-dir "/current/VERSION")))
+                    (not (file-exists?
+                          ~(str name-dir "/previous.checkpoint/VERSION"))))
+               ~force)
          (pipe
           (println "Y")                    ; confirmation
           ((str ~home "/bin/hadoop") namenode -format)))

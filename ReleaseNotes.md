@@ -1,3 +1,8 @@
+## 0.1.24
+
+- Guard hdfs-format on previous.checkpoint/VERSION
+  This is in addition to the current current/VERSION check.
+
 ## 0.1.23
 
 - Add hadoop-configure phase to write hadoop config
